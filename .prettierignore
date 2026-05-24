@@ -1,0 +1,9 @@
+node_modules
+dist
+package-lock.json
+AGENTS.md
+PROJECT.md
+PROJECT(3).md
+GAP_ANALYSIS.md
+DECISIONS.md
+implementation feedback.md

@@ -1,0 +1,581 @@
+:root {
+  color: #201c17;
+  background: #f6f4ee;
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  font-synthesis: none;
+  line-height: 1.5;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button,
+input,
+textarea,
+select {
+  min-height: 44px;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 3px solid #4c7d8f;
+  outline-offset: 2px;
+}
+
+input,
+textarea,
+select {
+  width: 100%;
+  border: 1px solid #c9c0b2;
+  border-radius: 8px;
+  background: #fffef9;
+  color: #201c17;
+  padding: 10px 12px;
+}
+
+textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+label {
+  display: grid;
+  gap: 6px;
+  color: #4b4540;
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.app-shell {
+  display: grid;
+  align-content: start;
+  justify-items: center;
+  min-height: 100vh;
+  padding: max(20px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
+    max(20px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  row-gap: 16px;
+}
+
+.app-shell__surface {
+  width: min(100%, 720px);
+  border: 1px solid #d8c8b6;
+  border-radius: 8px;
+  background: #fffaf2;
+  padding: 20px;
+  box-shadow: 0 18px 60px rgb(69 45 24 / 12%);
+}
+
+.app-header {
+  display: grid;
+  width: min(100%, 720px);
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+
+.app-nav {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.app-nav button,
+.primary-button,
+.secondary-button,
+.danger-button,
+.text-button {
+  border: 0;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-weight: 800;
+}
+
+.app-nav button,
+.secondary-button {
+  border: 1px solid #b9cabf;
+  background: #f4faf6;
+  color: #18382a;
+}
+
+.primary-button {
+  background: #255d4b;
+  color: #ffffff;
+}
+
+.danger-button {
+  background: #8f302f;
+  color: #ffffff;
+}
+
+.text-button {
+  min-height: 44px;
+  background: transparent;
+  color: #194d5b;
+  padding-inline: 0;
+  text-align: left;
+}
+
+.app-shell__eyebrow,
+.app-shell__summary {
+  margin: 0;
+  color: #665b50;
+}
+
+.app-shell__eyebrow {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.app-shell__summary {
+  font-size: 1rem;
+}
+
+h1 {
+  margin: 8px 0 4px;
+  color: #1d2a22;
+  font-size: 2.75rem;
+  line-height: 1;
+}
+
+h2,
+h3,
+p {
+  margin-top: 0;
+}
+
+h2 {
+  margin-bottom: 0;
+  color: #1d2a22;
+  font-size: 1.8rem;
+  line-height: 1.1;
+}
+
+h3 {
+  margin-bottom: 12px;
+  color: #233129;
+  font-size: 1.15rem;
+}
+
+.screen-stack {
+  display: grid;
+  gap: 16px;
+}
+
+.screen-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.screen-header--compact {
+  align-items: center;
+}
+
+.section-kicker {
+  margin: 0 0 4px;
+  color: #6a5141;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.filter-bar,
+.form-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+
+.collection-editor {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid #e3d8ca;
+  padding-top: 16px;
+}
+
+.collection-editor__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.collection-row {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  margin: 0;
+  border: 1px solid #d8c8b6;
+  border-radius: 8px;
+  background: #fffef9;
+  padding: 12px;
+}
+
+.collection-row legend {
+  color: #233129;
+  font-weight: 900;
+  padding: 0 6px;
+}
+
+.collection-row__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.collection-row__actions .secondary-button {
+  min-height: 40px;
+  padding: 8px 10px;
+}
+
+.full-span {
+  grid-column: 1 / -1;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.checkbox-row input {
+  width: 22px;
+  min-height: 22px;
+}
+
+.recipe-list,
+.planner-days,
+.category-list,
+.compact-list,
+.ingredient-list,
+.step-list {
+  display: grid;
+  gap: 10px;
+}
+
+.recipe-list {
+  padding: 0;
+}
+
+.recipe-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #d8c8b6;
+  border-radius: 8px;
+  background: #fffef9;
+  padding: 12px;
+}
+
+.recipe-card__main {
+  display: grid;
+  gap: 4px;
+}
+
+.recipe-card__title {
+  color: #1d2a22;
+  font-size: 1rem;
+  font-weight: 900;
+}
+
+.recipe-card__meta,
+.muted-text {
+  color: #706860;
+  font-size: 0.9rem;
+}
+
+.state-view {
+  display: grid;
+  gap: 8px;
+  border: 1px dashed #b9cabf;
+  border-radius: 8px;
+  background: #f8fbf8;
+  padding: 16px;
+}
+
+.state-view__title {
+  margin: 0;
+  color: #1d2a22;
+  font-weight: 900;
+}
+
+.state-view__message {
+  margin: 0;
+  color: #5c554e;
+}
+
+.action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.ingredient-list,
+.step-list,
+.compact-list {
+  padding-left: 18px;
+}
+
+.ingredient-groups {
+  display: grid;
+  gap: 14px;
+}
+
+.ingredient-groups h4 {
+  margin: 0 0 8px;
+  color: #233129;
+  font-size: 1rem;
+}
+
+.note-block {
+  border-left: 4px solid #4c7d8f;
+  background: #f3f8fa;
+  padding: 12px;
+}
+
+.guidance-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.guidance-list div {
+  border-left: 4px solid #b9cabf;
+  background: #f8fbf8;
+  padding: 10px 12px;
+}
+
+.guidance-list dt {
+  color: #233129;
+  font-weight: 900;
+}
+
+.guidance-list dd {
+  margin: 4px 0 0;
+  color: #4b4540;
+}
+
+.cook-mode {
+  min-height: 70vh;
+  align-content: start;
+}
+
+.cook-step-card {
+  display: grid;
+  min-height: 220px;
+  align-items: center;
+  border: 1px solid #d8c8b6;
+  border-radius: 8px;
+  background: #fffef9;
+  padding: 20px;
+}
+
+.cook-step-card p {
+  margin: 0;
+  color: #1d2a22;
+  font-size: 1.35rem;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.dietary-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.nutrition-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.dietary-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  border: 1px solid #e3d8ca;
+  border-radius: 8px;
+  background: #fffaf2;
+  padding: 10px;
+}
+
+.split-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+}
+
+.category-list__item {
+  display: grid;
+  gap: 6px;
+}
+
+.category-list__item > .text-button[aria-pressed="true"] {
+  color: #1d2a22;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+}
+
+.compact-list {
+  list-style: none;
+  padding-left: 0;
+}
+
+.compact-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  border-bottom: 1px solid #e3d8ca;
+  padding-bottom: 10px;
+}
+
+.planner-day {
+  display: grid;
+  gap: 14px;
+  border-top: 1px solid #d8c8b6;
+  padding-top: 16px;
+}
+
+.planner-mode-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.planner-mode-tabs [aria-selected="true"] {
+  background: #255d4b;
+  color: #ffffff;
+}
+
+.planner-board-config,
+.planner-day__add,
+.planner-entry-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+
+.planner-entry-actions {
+  border-top: 1px solid #e3d8ca;
+  padding-top: 8px;
+}
+
+.planner-entry-list li {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.pill {
+  border-radius: 999px;
+  background: #e8f0f1;
+  color: #194d5b;
+  padding: 6px 10px;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.inline-field {
+  grid-template-columns: auto 84px;
+  align-items: center;
+}
+
+@media (min-width: 620px) {
+  .app-header {
+    grid-template-columns: 1fr auto;
+    align-items: end;
+  }
+
+  .app-nav {
+    width: 340px;
+  }
+
+  .filter-bar,
+  .form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: end;
+  }
+
+  .split-panel {
+    grid-template-columns: 0.9fr 1.1fr;
+  }
+
+  .dietary-row {
+    grid-template-columns: minmax(0, 1fr) 180px;
+    align-items: end;
+  }
+
+  .compact-list li {
+    grid-template-columns: minmax(0, 1fr) auto auto auto;
+  }
+
+  .planner-board-config,
+  .planner-day__add {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: end;
+  }
+
+  .planner-entry-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: end;
+  }
+
+  .planner-entry-list li {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 380px) {
+  h1 {
+    font-size: 2.25rem;
+  }
+
+  .app-shell__surface {
+    padding: 14px;
+  }
+
+  .screen-header,
+  .recipe-card,
+  .collection-editor__header {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .screen-header,
+  .collection-editor__header {
+    display: grid;
+  }
+}
