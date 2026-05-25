@@ -12,6 +12,8 @@ After installing dependencies, use:
 
 - `npm run dev` to start the local web app.
 - `npm run build` to type-check and build the app.
+- `npm run android:apk:debug` to build a local Android debug APK at `android/app/build/outputs/apk/debug/app-debug.apk`.
+- `npm run android:install:debug` to build and update-install the debug APK on a connected Android device without clearing app data.
 - `npm run lint` to run ESLint.
 - `npm run format` to check Prettier formatting.
 - `npm run test` to run the unit/component test suite.

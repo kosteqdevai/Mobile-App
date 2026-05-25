@@ -33,6 +33,7 @@ export type RecipePracticalGuidance = {
 };
 
 export type WarningVerificationStatus = "unverified" | "estimated" | "userVerified";
+export type AllergenPresenceStatus = "unverified" | "contains" | "doesNotContain";
 
 export type BigNineAllergen =
   | "milk"
@@ -47,7 +48,7 @@ export type BigNineAllergen =
 
 export type RecipeAllergenFlag = {
   allergen: BigNineAllergen;
-  status: WarningVerificationStatus;
+  status: AllergenPresenceStatus;
 };
 
 export type RecipeDietaryFlag = {
@@ -62,15 +63,13 @@ export type RecipeDietaryMetadata = {
 
 export type NutritionStatus = "notCalculated" | "estimated" | "partiallyMapped" | "userVerified";
 
-export type NutritionMetric = "calories" | "protein" | "carbs" | "fat" | "fiber" | "sodium";
+export type NutritionMetric = "calories" | "protein" | "fat" | "carbs";
 
 export type NutritionUnit = "kcal" | "g" | "mg";
 
 export type RecipeNutritionValue = {
   amount: number;
   unit: NutritionUnit;
-  status: NutritionStatus;
-  source: string;
 };
 
 export type RecipeNutritionEstimate = Partial<Record<NutritionMetric, RecipeNutritionValue>>;
@@ -93,6 +92,7 @@ export type Recipe = {
   dietary?: RecipeDietaryMetadata;
   nutrition?: RecipeNutritionEstimate;
   isFavorite: boolean;
+  isTemplate?: boolean;
   photo?: RecipePhoto;
   createdAt: string;
   updatedAt: string;
@@ -119,6 +119,7 @@ export type RecipeInput = {
   dietary?: RecipeDietaryMetadata;
   nutrition?: RecipeNutritionEstimate;
   isFavorite?: boolean;
+  isTemplate?: boolean;
   photo?: RecipePhoto;
   createdAt: string;
   updatedAt: string;
@@ -183,6 +184,7 @@ export function createRecipe(input: RecipeInput): Result<Recipe, RecipeValidatio
     dietary: normalizeDietaryMetadata(input.dietary),
     nutrition: normalizeNutritionEstimate(input.nutrition),
     isFavorite: input.isFavorite ?? false,
+    isTemplate: input.isTemplate ?? false,
     photo: input.photo,
     createdAt: input.createdAt.trim(),
     updatedAt: input.updatedAt.trim(),
@@ -380,30 +382,20 @@ const warningVerificationStatuses: ReadonlyArray<WarningVerificationStatus> = [
   "userVerified",
 ];
 
-const nutritionStatuses: ReadonlyArray<NutritionStatus> = [
-  "notCalculated",
-  "estimated",
-  "partiallyMapped",
-  "userVerified",
+const allergenPresenceStatuses: ReadonlyArray<AllergenPresenceStatus> = [
+  "unverified",
+  "contains",
+  "doesNotContain",
 ];
 
 const nutritionUnitsByMetric: Record<NutritionMetric, NutritionUnit> = {
   calories: "kcal",
   protein: "g",
-  carbs: "g",
   fat: "g",
-  fiber: "g",
-  sodium: "mg",
+  carbs: "g",
 };
 
-const nutritionMetrics: ReadonlyArray<NutritionMetric> = [
-  "calories",
-  "protein",
-  "carbs",
-  "fat",
-  "fiber",
-  "sodium",
-];
+const nutritionMetrics: ReadonlyArray<NutritionMetric> = ["calories", "protein", "fat", "carbs"];
 
 const ingredientScaleModes: ReadonlyArray<IngredientScaleMode> = [
   "linear",
@@ -432,11 +424,11 @@ function validateDietaryMetadata(
       );
     }
 
-    if (!warningVerificationStatuses.includes(flag.status)) {
+    if (!allergenPresenceStatuses.includes(flag.status)) {
       errors.push(
         validationError(
           "recipe-allergen-invalid",
-          "Allergen warning status is invalid.",
+          "Allergen presence status is invalid.",
           `dietary.allergens.${index}.status`,
         ),
       );
@@ -479,7 +471,7 @@ function normalizeDietaryMetadata(
         flag.allergen,
         {
           allergen: flag.allergen,
-          status: flag.status,
+          status: normalizeAllergenPresenceStatus(flag.status),
         },
       ]),
     ).values(),
@@ -538,26 +530,6 @@ function validateNutritionEstimate(
         ),
       );
     }
-
-    if (!nutritionStatuses.includes(value.status)) {
-      errors.push(
-        validationError(
-          "recipe-nutrition-invalid",
-          "Nutrition status is invalid.",
-          `nutrition.${metric}.status`,
-        ),
-      );
-    }
-
-    if (value.source.trim().length === 0) {
-      errors.push(
-        validationError(
-          "recipe-nutrition-invalid",
-          "Nutrition source is required.",
-          `nutrition.${metric}.source`,
-        ),
-      );
-    }
   });
 }
 
@@ -580,12 +552,22 @@ function normalizeNutritionEstimate(
     normalizedNutrition[metric] = {
       amount: value.amount,
       unit: nutritionUnitsByMetric[metric],
-      status: value.status,
-      source: value.source.trim(),
     };
   });
 
   return Object.keys(normalizedNutrition).length > 0 ? normalizedNutrition : undefined;
+}
+
+function normalizeAllergenPresenceStatus(status: unknown): AllergenPresenceStatus {
+  if (status === "contains" || status === "doesNotContain" || status === "unverified") {
+    return status;
+  }
+
+  if (status === "estimated" || status === "userVerified") {
+    return "contains";
+  }
+
+  return "unverified";
 }
 
 function validationError(

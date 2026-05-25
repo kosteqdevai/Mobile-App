@@ -7,11 +7,13 @@ import type {
 } from "../../core/data/localDatabase";
 import type { CookbookRecord } from "../../features/cookbooks/data/cookbookMapper";
 import type { MealPlanRecord } from "../../features/planner/data/mealPlanMapper";
+import type { RecipeComponentRecord } from "../../features/recipe-components/data/recipeComponentMapper";
 import type { RecipeRecord } from "../../features/recipes/data/recipeMapper";
 
 export const LOCAL_SCHEMA_VERSION_KEY = "lacucina:schema-version";
 export const LOCAL_SCHEMA_VERSION_V1 = "1";
 export const LOCAL_SCHEMA_VERSION_V2 = "2";
+export const LOCAL_SCHEMA_VERSION_V3 = "3";
 
 export const LEGACY_LOCAL_STORAGE_KEYS = {
   recipes: "lacucina:recipes",
@@ -23,6 +25,7 @@ export type LocalDataMigrationSeeds = {
   recipes: ReadonlyArray<RecipeRecord>;
   cookbooks: ReadonlyArray<CookbookRecord>;
   mealPlans: ReadonlyArray<MealPlanRecord>;
+  recipeComponents: ReadonlyArray<RecipeComponentRecord>;
 };
 
 export type LocalDataMigrationOptions = {
@@ -31,17 +34,23 @@ export type LocalDataMigrationOptions = {
   seeds: LocalDataMigrationSeeds;
 };
 
-export async function migrateLocalDataToSchemaV2(options: LocalDataMigrationOptions) {
+export async function migrateLocalDataToSchemaV3(options: LocalDataMigrationOptions) {
   const currentVersion = options.storage.getItem(LOCAL_SCHEMA_VERSION_KEY);
 
+  if (currentVersion === LOCAL_SCHEMA_VERSION_V3) {
+    return;
+  }
+
   if (currentVersion === LOCAL_SCHEMA_VERSION_V2) {
+    await migrateStore(options.database, "recipeComponents", options.seeds.recipeComponents);
+    options.storage.setItem(LOCAL_SCHEMA_VERSION_KEY, LOCAL_SCHEMA_VERSION_V3);
     return;
   }
 
   if (currentVersion && currentVersion !== LOCAL_SCHEMA_VERSION_V1) {
     throw new LocalPersistenceError(
       "schema-version-unsupported",
-      `Local data schema ${currentVersion} is not supported by schema ${LOCAL_SCHEMA_VERSION_V2}.`,
+      `Local data schema ${currentVersion} is not supported by schema ${LOCAL_SCHEMA_VERSION_V3}.`,
     );
   }
 
@@ -66,18 +75,22 @@ export async function migrateLocalDataToSchemaV2(options: LocalDataMigrationOpti
     "mealPlans",
     hasLegacyCollections ? legacyData.mealPlans : options.seeds.mealPlans,
   );
+  await migrateStore(options.database, "recipeComponents", options.seeds.recipeComponents);
 
-  options.storage.setItem(LOCAL_SCHEMA_VERSION_KEY, LOCAL_SCHEMA_VERSION_V2);
+  options.storage.setItem(LOCAL_SCHEMA_VERSION_KEY, LOCAL_SCHEMA_VERSION_V3);
   options.storage.removeItem(LEGACY_LOCAL_STORAGE_KEYS.recipes);
   options.storage.removeItem(LEGACY_LOCAL_STORAGE_KEYS.cookbooks);
   options.storage.removeItem(LEGACY_LOCAL_STORAGE_KEYS.mealPlans);
 }
+
+export const migrateLocalDataToSchemaV2 = migrateLocalDataToSchemaV3;
 
 function readLegacyData(storage: KeyValueStore): LocalDataMigrationSeeds {
   return {
     recipes: readLegacyCollection<RecipeRecord>(storage, LEGACY_LOCAL_STORAGE_KEYS.recipes),
     cookbooks: readLegacyCollection<CookbookRecord>(storage, LEGACY_LOCAL_STORAGE_KEYS.cookbooks),
     mealPlans: readLegacyCollection<MealPlanRecord>(storage, LEGACY_LOCAL_STORAGE_KEYS.mealPlans),
+    recipeComponents: [],
   };
 }
 

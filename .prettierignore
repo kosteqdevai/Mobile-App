@@ -1,5 +1,6 @@
 node_modules
 dist
+android
 package-lock.json
 AGENTS.md
 PROJECT.md
@@ -7,3 +8,4 @@ PROJECT(3).md
 GAP_ANALYSIS.md
 DECISIONS.md
 implementation feedback.md
+LaCucina_skonsolidowane_pomysly.md

@@ -1,4 +1,4 @@
-import type { NutritionMetric, NutritionStatus, NutritionUnit, Recipe } from "./recipe";
+import type { NutritionMetric, NutritionUnit, Recipe } from "./recipe";
 
 export type NutritionMetricDefinition = {
   metric: NutritionMetric;
@@ -10,17 +10,13 @@ export type NutritionSummaryItem = NutritionMetricDefinition & {
   recipeAmount: number;
   perServingAmount: number;
   plannedAmount?: number;
-  status: NutritionStatus;
-  source: string;
 };
 
 export const nutritionMetricDefinitions: ReadonlyArray<NutritionMetricDefinition> = [
   { metric: "calories", label: "Calories", unit: "kcal" },
   { metric: "protein", label: "Protein", unit: "g" },
-  { metric: "carbs", label: "Carbs", unit: "g" },
   { metric: "fat", label: "Fat", unit: "g" },
-  { metric: "fiber", label: "Fiber", unit: "g" },
-  { metric: "sodium", label: "Sodium", unit: "mg" },
+  { metric: "carbs", label: "Carbs", unit: "g" },
 ];
 
 export function getRecipeNutritionSummary(recipe: Recipe): ReadonlyArray<NutritionSummaryItem> {
@@ -40,8 +36,6 @@ export function getRecipeNutritionSummary(recipe: Recipe): ReadonlyArray<Nutriti
         ...definition,
         recipeAmount: value.amount,
         perServingAmount: value.amount / recipe.baseServings,
-        status: value.status,
-        source: value.source,
       },
     ];
   });
@@ -64,16 +58,4 @@ export function getPlannedNutritionSummary(
 export function formatNutritionAmount(amount: number) {
   const roundedAmount = Math.round((amount + Number.EPSILON) * 10) / 10;
   return Number.isInteger(roundedAmount) ? String(roundedAmount) : roundedAmount.toFixed(1);
-}
-
-export function nutritionStatusLabel(status: NutritionStatus) {
-  if (status === "notCalculated") {
-    return "Not calculated";
-  }
-
-  if (status === "partiallyMapped") {
-    return "Partially mapped";
-  }
-
-  return status === "userVerified" ? "User verified" : "Estimated";
 }

@@ -1,7 +1,12 @@
 export const LOCAL_DATABASE_NAME = "lacucina";
-export const LOCAL_DATABASE_SCHEMA_VERSION = 2;
+export const LOCAL_DATABASE_SCHEMA_VERSION = 3;
 
-export const LOCAL_DATABASE_STORE_NAMES = ["recipes", "cookbooks", "mealPlans"] as const;
+export const LOCAL_DATABASE_STORE_NAMES = [
+  "recipes",
+  "cookbooks",
+  "mealPlans",
+  "recipeComponents",
+] as const;
 
 export type LocalDatabaseStoreName = (typeof LOCAL_DATABASE_STORE_NAMES)[number];
 

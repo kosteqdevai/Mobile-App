@@ -57,21 +57,9 @@ describe("MVP flow integration", () => {
     fireEvent.change(screen.getByLabelText("Leftover ideas"), {
       target: { value: "Use leftovers as a sauce base." },
     });
-    fireEvent.click(screen.getByLabelText("Contains milk"));
-    fireEvent.change(screen.getByLabelText("Milk warning status"), {
-      target: { value: "estimated" },
-    });
-    fireEvent.change(screen.getByLabelText("Dietary tags"), {
-      target: { value: "comfort food" },
-    });
+    fireEvent.click(screen.getByLabelText("Milk allergen"));
     fireEvent.change(screen.getByLabelText("Calories amount"), { target: { value: "300" } });
-    fireEvent.change(screen.getByLabelText("Calories nutrition source"), {
-      target: { value: "Manual estimate" },
-    });
     fireEvent.change(screen.getByLabelText("Protein amount"), { target: { value: "12" } });
-    fireEvent.change(screen.getByLabelText("Protein nutrition source"), {
-      target: { value: "Manual estimate" },
-    });
     fireEvent.click(screen.getByRole("button", { name: "Save recipe" }));
 
     expect(await screen.findByRole("heading", { name: "Garlic soup" })).toBeInTheDocument();
@@ -81,9 +69,12 @@ describe("MVP flow integration", () => {
     expect(screen.getByText("Blend smooth.")).toBeInTheDocument();
     expect(screen.getByText("Peel garlic before cooking.")).toBeInTheDocument();
     expect(screen.getByText("Use leftovers as a sauce base.")).toBeInTheDocument();
-    expect(screen.getByText("Contains milk")).toBeInTheDocument();
-    expect(screen.getByText("comfort food")).toBeInTheDocument();
-    expect(screen.getByText(/300 kcal per recipe \/ 150 kcal per serving/i)).toBeInTheDocument();
+    expect(screen.getByText("Milk")).toBeInTheDocument();
+    expect(screen.getByText(/\(Contains\)/)).toBeInTheDocument();
+    expect(screen.queryByText("comfort food")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/600 kcal for 4 servings \/ 150 kcal per serving/i),
+    ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
     fireEvent.change(await screen.findByLabelText("Search recipes"), {
@@ -135,5 +126,60 @@ describe("MVP flow integration", () => {
     expect(within(persistedRestDay).getByLabelText("Board servings for Garlic soup")).toHaveValue(
       4,
     );
+  });
+
+  it("saves a template recipe and imports it into a new recipe", async () => {
+    const storage = new MemoryKeyValueStore();
+    const database = new MemoryLocalDatabase();
+    renderPersistedApp(storage, database);
+
+    expect(await screen.findByRole("heading", { name: "Recipes" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Add recipe" }));
+    fireEvent.change(screen.getByLabelText("Recipe title"), {
+      target: { value: "Pierogi dough" },
+    });
+    fireEvent.change(screen.getByLabelText("Ingredient 1 name"), {
+      target: { value: "Flour" },
+    });
+    fireEvent.change(screen.getByLabelText("Ingredient 1 quantity"), {
+      target: { value: "300" },
+    });
+    fireEvent.change(screen.getByLabelText("Step 1 text"), {
+      target: { value: "Knead dough." },
+    });
+    fireEvent.click(screen.getByLabelText("Wheat allergen"));
+    fireEvent.change(screen.getByLabelText("Calories amount"), { target: { value: "400" } });
+    fireEvent.click(screen.getByLabelText("Template recipe"));
+    fireEvent.click(screen.getByRole("button", { name: "Save recipe" }));
+    expect(await screen.findByRole("heading", { name: "Pierogi dough" })).toBeInTheDocument();
+    expect(screen.getByText("Template recipe")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add recipe" }));
+    const templateSelect = (await screen.findByLabelText(
+      "Template recipe to import",
+    )) as HTMLSelectElement;
+    expect(templateSelect.value).toMatch(/^recipe-/);
+    fireEvent.click(screen.getByRole("button", { name: "Import template recipe" }));
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Pierogi dough imported as independent recipe rows.",
+    );
+    expect(
+      within(screen.getByRole("table", { name: "Nutrition totals" })).getByRole("row", {
+        name: /Calories 400 kcal 0 kcal 400 kcal 200 kcal/i,
+      }),
+    ).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Recipe title"), { target: { value: "Pierogi" } });
+    fireEvent.change(screen.getByLabelText("Calories amount"), { target: { value: "50" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save recipe" }));
+
+    expect(await screen.findByRole("heading", { name: "Pierogi" })).toBeInTheDocument();
+    expect(screen.getByText("Knead dough.")).toBeInTheDocument();
+    expect(screen.getAllByText(/300 g/i)).not.toHaveLength(0);
+    expect(screen.getByText("Wheat")).toBeInTheDocument();
+    expect(
+      screen.getByText(/450 kcal for 2 servings \/ 225 kcal per serving/i),
+    ).toBeInTheDocument();
   });
 });

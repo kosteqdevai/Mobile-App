@@ -16,6 +16,7 @@ const recipe: Recipe = {
   tags: ["quick"],
   difficulty: "beginner",
   isFavorite: false,
+  isTemplate: false,
   createdAt: "2026-05-22T00:00:00.000Z",
   updatedAt: "2026-05-22T00:00:00.000Z",
 };

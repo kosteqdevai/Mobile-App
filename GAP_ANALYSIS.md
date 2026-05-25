@@ -612,3 +612,172 @@ tests: Accessibility test command plus component tests for dynamic row keyboard 
 closes_when: Accessibility regressions in core flows are caught locally before manual QA.
 escalate_if: Tooling requires unsupported browser/device APIs or paid services.
 do_not: Do not redesign product scope or add tracking.
+
+## GAP-048 — Add Android debug packaging bridge
+phase: 5
+status: closed
+type: release
+blocked_by: GAP-034
+goal: Package the web-first MVP into an installable Android debug APK for local device smoke testing.
+scope: package.json, package-lock.json, capacitor.config.ts, android/, README.md, docs/release.md, lint/format ignores.
+acceptance_criteria: Capacitor Android wrapper points to the Vite dist output; a repeatable command builds a debug APK; no production signing keys, store credentials, analytics, or native rewrites are introduced; the APK installs and launches on a connected Android device.
+tests: npm run android:apk:debug; adb install -r android/app/build/outputs/apk/debug/app-debug.apk; adb shell monkey -p com.lacucina.app 1; npm run lint; npm run test; npm audit --omit=dev; Prettier check for touched files.
+closes_when: app-debug.apk exists, installs successfully through ADB, and the com.lacucina.app process launches on the connected phone.
+escalate_if: Play Store upload, release AAB signing, production keystore handling, app-store accounts, or platform permissions are required.
+do_not: Do not commit signing files, certificates, secrets, real user data, tracking, backend sync, or native feature rewrites.
+
+## GAP-049 — Codify consolidated ideas roadmap
+phase: 0
+status: closed
+type: product
+blocked_by: none
+goal: Make LaCucina_skonsolidowane_pomysly.md part of the canonical roadmap.
+scope: PROJECT.md, docs/implementation-feedback-plan.md, GAP_ANALYSIS.md.
+acceptance_criteria: Base recipe copy-import, simplified allergens, quantity UX fix, simplified macros, and US unit list scope are documented as next roadmap items.
+tests: Manual docs review.
+closes_when: A developer can implement the new ideas without rereading the loose notes file.
+escalate_if: Any idea is meant to introduce backend sync, publishing, medical claims, or automatic nutrition/unit conversion.
+do_not: Do not implement source code in this gap.
+
+## GAP-050 — Fix ingredient quantity mobile input
+phase: 3
+status: closed
+type: ui
+blocked_by: GAP-036
+goal: Make ingredient quantity entry fast and safe on phones.
+scope: Recipe form presentation and tests.
+acceptance_criteria: New ingredient rows store quantity as a UI string, start blank with a useful placeholder, parse only on save, show accessible validation for empty/invalid values, and editing existing recipes still prefills saved quantities.
+tests: Component tests for blank initial field, typing 250, empty validation, invalid validation, and edit prefill.
+closes_when: Users no longer fight a default numeric value or create values like 0250.
+escalate_if: Domain or persistence would need to store quantity as a string.
+do_not: Do not change the recipe domain quantity type from number.
+
+## GAP-051 — Simplify allergen presence table
+phase: 2
+status: closed
+type: domain
+blocked_by: GAP-044, GAP-046
+goal: Replace heavy allergen verification labels with a practical Big 9 tri-state table.
+scope: Recipe dietary domain, mappers, form/detail UI, tests.
+acceptance_criteria: Every Big 9 allergen can be marked unverified, contains, or does not contain; UI no longer exposes userVerified/estimated for allergens; legacy estimated/userVerified allergen flags load as contains; missing legacy flags load as unverified; wording never guarantees allergy safety.
+tests: Domain tests, mapper compatibility tests, form/detail component tests.
+closes_when: Allergen entry is one compact table and old local records remain readable.
+escalate_if: Automatic allergen detection, clinical advice, or public recipe safety claims are required.
+do_not: Do not add medical claims or ingredient-based auto suggestions.
+
+## GAP-052 — Simplify manual macro fields
+phase: 2
+status: closed
+type: domain
+blocked_by: GAP-045, GAP-046
+goal: Reduce nutrition to practical manual macro fields.
+scope: Recipe nutrition domain, mappers, form/detail/planner summaries, tests.
+acceptance_criteria: New UI captures optional calories, protein, fat, and carbs only; status/source controls are removed; existing v2 nutrition records map forward by preserving supported amounts; detail/planner label values as manual estimates.
+tests: Domain summary tests, mapper compatibility tests, form/detail/planner component tests.
+closes_when: Users can enter B/T/W + calories without managing metadata fields.
+escalate_if: Automatic calorie calculation, external food databases, or clinical diet targets are required.
+do_not: Do not call external nutrition services or calculate calories from macros.
+
+## GAP-053 — Expand ingredient unit catalog
+phase: 2
+status: closed
+type: domain
+blocked_by: GAP-039
+goal: Support common US and practical recipe units as selectable ingredient units.
+scope: Recipe unit catalog, recipe form unit selector, detail/export display, tests, docs/portion-scaling.md.
+acceptance_criteria: Unit options include tsp, tbsp, cup, fl oz, pt, qt, gal, oz, lb, stick of butter, can, package/pkg, pinch, dash, clove, slice, piece, bunch, plus existing metric units; each unit has a type; custom existing units remain selectable.
+tests: Unit catalog tests and component tests for unit selection/custom unit preservation.
+closes_when: A user can enter US recipe units from the list without conversion behavior.
+escalate_if: Ingredient-density conversion or metric/US conversion becomes required.
+do_not: Do not add automatic unit conversion.
+
+## GAP-054 — Model reusable recipe components
+phase: 2
+status: closed
+type: domain
+blocked_by: GAP-049, GAP-036
+goal: Define Base Recipes as reusable recipe components without global syncing.
+scope: New recipe-components domain/application layer and tests.
+acceptance_criteria: RecipeComponent stores name, base servings, ingredients, steps, prep/cook time, notes, sourceRecipeId, createdAt, updatedAt; use cases cover create, update, delete, list, get, and build an import snapshot payload.
+tests: Domain and application tests with fakes.
+closes_when: Components can be tested without UI or real persistence.
+escalate_if: Nested components, linked updates, or automatic global sync are required.
+do_not: Do not mutate recipes that already imported a component.
+
+## GAP-055 — Persist recipe components in IndexedDB schema v3
+phase: 4
+status: closed
+type: data
+blocked_by: GAP-054, GAP-046
+goal: Persist reusable recipe components locally without losing schema v2 data.
+scope: Local database schema, component repository, mappers, migration tests.
+acceptance_criteria: IndexedDB schema v3 adds a recipeComponents store; v2 recipes/cookbooks/plans migrate without deletion; corrupt component records fail safely; in-memory and IndexedDB repositories satisfy the same contract.
+tests: Mapper tests, repository tests, v2-to-v3 migration tests.
+closes_when: Components survive reload and existing local data remains intact.
+escalate_if: Backup/export, sync, encryption, or account recovery becomes mandatory.
+do_not: Do not add backend sync or real user data fixtures.
+
+## GAP-056 — Build component library and import flow
+phase: 3
+status: closed
+type: ui
+blocked_by: GAP-050, GAP-054, GAP-055
+goal: Let users create reusable components and import them into recipes as copies.
+scope: Component library screen, recipe form import UI, routing/tests.
+acceptance_criteria: Users can list/create/edit/delete components; recipe form can import a component; imported ingredients and steps are appended as independent copied rows; ingredient group defaults to component name when useful; errors and empty states are visible.
+tests: Component tests for library states and import behavior; integration test saving a recipe with an imported component.
+closes_when: A component can be reused in a new recipe without manual retyping.
+escalate_if: Import must stay linked to the source component.
+do_not: Do not implement auto-update, nesting, publishing, or marketplace behavior.
+
+## GAP-057 — Extract component from existing recipe group
+phase: 3
+status: closed
+type: ui
+blocked_by: GAP-038, GAP-056
+goal: Let users turn part of an existing recipe into a reusable component.
+scope: Recipe detail/form extraction UI, component use cases, tests.
+acceptance_criteria: From an existing recipe, users can choose a named ingredient group, select a contiguous step range or no steps, confirm a component name, and save an independent RecipeComponent with sourceRecipeId.
+tests: Component tests for extraction success, validation, cancellation, and failure; integration test extracting then importing into another recipe.
+closes_when: A repeated section like pierogi dough can be saved once and reused elsewhere.
+escalate_if: The user needs automatic detection of recipe sections or linked component updates.
+do_not: Do not infer components automatically or update existing recipes globally.
+
+## GAP-058 — Replace component library with recipe templates
+phase: 3
+status: closed
+type: ui
+blocked_by: GAP-056
+goal: Make reusable bases normal cookbook recipes marked as templates instead of a separate Components section.
+scope: Recipe domain, recipe form/list/detail UI, app routing, integration tests, docs/implementation-feedback-plan.md.
+acceptance_criteria: Recipe form has a Template recipe checkbox; template recipes save as normal cookbook recipes; primary navigation no longer exposes a separate Components screen; new recipes can import a template recipe as independent copied ingredient and step rows; old component persistence remains unlinked and does not auto-sync imported recipes.
+tests: Component tests for template checkbox and import behavior; routing test for removed Components navigation; integration test saving a template recipe and importing it into another recipe.
+closes_when: A reusable base recipe is created and reused through the normal recipe flow without a separate component library screen.
+escalate_if: Templates must stay linked, auto-update importing recipes, or leave the normal cookbook model.
+do_not: Do not add global syncing, nested templates, publishing, or marketplace behavior.
+
+## GAP-059 — Replace allergen dropdowns with checkbox table
+phase: 3
+status: closed
+type: ui
+blocked_by: GAP-051
+goal: Make allergen entry a compact Big 9 checkbox table where checked means contains and blank means no stored flag.
+scope: Recipe dietary form/detail UI, dietary form mapping, component tests, integration tests.
+acceptance_criteria: Big 9 allergens render as one table of checkboxes; checked allergens save as contains; unchecked allergens are omitted from new recipe dietary metadata; no allergen dropdowns are exposed in the recipe form; detail view displays only checked/contains allergens and never shows unchecked or does-not-contain safety claims.
+tests: Component tests for checkbox entry and saved metadata; integration test creating a recipe with a checked allergen; detail component coverage for contains-only display.
+closes_when: Allergen entry is one click per allergen and blank boxes create no allergen records.
+escalate_if: Automatic allergen detection, clinical advice, or explicit allergen-free claims are required.
+do_not: Do not add medical claims, ingredient-based auto suggestions, or allergy-safe guarantees.
+
+## GAP-060 — Expand template import metadata and collapsed editing
+phase: 3
+status: closed
+type: ui
+blocked_by: GAP-058, GAP-059
+goal: Make template imports carry practical metadata while keeping the new recipe form focused on additions.
+scope: Recipe form/detail UI, nutrition/allergen form mapping, component/integration tests, styles.
+acceptance_criteria: Multiple template recipes can be imported into one new recipe; imported template allergens are checked in the new recipe; imported template nutrition is shown as a separate subtotal; manual nutrition fields remain available for additions; the bottom summary shows template, manual, total, and per-serving values; saved nutrition stores the combined totals; detail nutrition scales to the selected serving count; dietary tags/status controls are removed; imported ingredients and steps render as collapsible copied sections.
+tests: Component tests for multi-template import, allergen merge, nutrition totals, collapsed copied rows, and saved payload; integration test for persisted template import and scaled nutrition detail; npm.cmd run quality before mobile install.
+closes_when: A user can import more than one template, see what nutrition came from templates versus additions, and edit imported rows without the form becoming one long always-expanded block.
+escalate_if: Template imports must remain linked to source recipes, calculate nutrition automatically, or make allergy-safety claims.
+do_not: Do not add backend sync, automatic nutrition/unit conversion, medical claims, nested template logic, or marketplace behavior.

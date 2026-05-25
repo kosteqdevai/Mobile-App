@@ -11,7 +11,7 @@ const browserGlobals = {
 
 export default tseslint.config(
   {
-    ignores: ["dist", "node_modules"],
+    ignores: ["android", "dist", "node_modules"],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

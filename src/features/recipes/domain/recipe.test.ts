@@ -37,8 +37,8 @@ const validRecipeInput: RecipeInput = {
   },
   dietary: {
     allergens: [
-      { allergen: "wheat", status: "estimated" },
-      { allergen: "sesame", status: "userVerified" },
+      { allergen: "wheat", status: "contains" },
+      { allergen: "sesame", status: "doesNotContain" },
     ],
     dietaryTags: [
       { label: " Vegetarian ", status: "unverified" },
@@ -49,17 +49,10 @@ const validRecipeInput: RecipeInput = {
     calories: {
       amount: 540,
       unit: "kcal",
-      status: "estimated",
-      source: " Manual estimate ",
-    },
-    sodium: {
-      amount: 600,
-      unit: "mg",
-      status: "partiallyMapped",
-      source: "Label review",
     },
   },
   isFavorite: true,
+  isTemplate: true,
   createdAt: "2026-05-22T00:00:00.000Z",
   updatedAt: "2026-05-22T00:00:00.000Z",
 };
@@ -88,8 +81,8 @@ describe("createRecipe", () => {
     });
     expect(result.value.dietary).toEqual({
       allergens: [
-        { allergen: "wheat", status: "estimated" },
-        { allergen: "sesame", status: "userVerified" },
+        { allergen: "wheat", status: "contains" },
+        { allergen: "sesame", status: "doesNotContain" },
       ],
       dietaryTags: [{ label: "vegetarian", status: "estimated" }],
     });
@@ -97,17 +90,10 @@ describe("createRecipe", () => {
       calories: {
         amount: 540,
         unit: "kcal",
-        status: "estimated",
-        source: "Manual estimate",
-      },
-      sodium: {
-        amount: 600,
-        unit: "mg",
-        status: "partiallyMapped",
-        source: "Label review",
       },
     });
     expect(result.value.isFavorite).toBe(true);
+    expect(result.value.isTemplate).toBe(true);
   });
 
   it("rejects an empty recipe title", () => {
@@ -203,7 +189,7 @@ describe("createRecipe", () => {
     const result = createRecipe({
       ...validRecipeInput,
       dietary: {
-        allergens: [{ allergen: "mustard", status: "estimated" }],
+        allergens: [{ allergen: "mustard", status: "contains" }],
         dietaryTags: [{ label: "  ", status: "unchecked" }],
       },
     } as RecipeInput);
@@ -234,8 +220,6 @@ describe("createRecipe", () => {
         calories: {
           amount: -1,
           unit: "g",
-          status: "estimated",
-          source: "",
         },
       },
     } as RecipeInput);
@@ -255,12 +239,6 @@ describe("createRecipe", () => {
       expect.objectContaining({
         code: "recipe-nutrition-invalid",
         path: "nutrition.calories.unit",
-      }),
-    );
-    expect(result.error).toContainEqual(
-      expect.objectContaining({
-        code: "recipe-nutrition-invalid",
-        path: "nutrition.calories.source",
       }),
     );
   });

@@ -40,26 +40,57 @@ const sampleRecipe: Recipe = {
     leftoverUse: "Turn leftovers into a frittata.",
   },
   dietary: {
-    allergens: [{ allergen: "wheat", status: "estimated" }],
+    allergens: [{ allergen: "wheat", status: "contains" }],
     dietaryTags: [{ label: "vegetarian", status: "userVerified" }],
   },
   nutrition: {
     calories: {
       amount: 640,
       unit: "kcal",
-      status: "estimated",
-      source: "Manual entry",
     },
     protein: {
       amount: 24,
       unit: "g",
-      status: "userVerified",
-      source: "Package label",
     },
   },
   isFavorite: true,
+  isTemplate: false,
   createdAt: "2026-05-22T00:00:00.000Z",
   updatedAt: "2026-05-22T00:00:00.000Z",
+};
+
+const templateRecipe: Recipe = {
+  ...sampleRecipe,
+  id: "recipe-template-dough",
+  title: "Pierogi dough",
+  description: "Reusable dough base",
+  baseServings: 4,
+  ingredients: [{ name: "Flour", quantity: 300, unit: "g" }],
+  steps: [{ position: 1, text: "Knead dough." }],
+  isFavorite: false,
+  isTemplate: true,
+};
+
+const sauceTemplateRecipe: Recipe = {
+  ...sampleRecipe,
+  id: "recipe-template-sauce",
+  title: "Tomato sauce",
+  description: "Reusable sauce base",
+  baseServings: 2,
+  ingredients: [{ name: "Tomato", quantity: 200, unit: "g" }],
+  steps: [{ position: 1, text: "Simmer sauce." }],
+  dietary: {
+    allergens: [{ allergen: "milk", status: "contains" }],
+    dietaryTags: [],
+  },
+  nutrition: {
+    calories: {
+      amount: 120,
+      unit: "kcal",
+    },
+  },
+  isFavorite: false,
+  isTemplate: true,
 };
 
 const sampleCookbook: Cookbook = {
@@ -269,13 +300,16 @@ describe("RecipeDetailScreen", () => {
     expect(screen.getByText("Make the sauce in the morning.")).toBeInTheDocument();
     expect(screen.getByText(/Review freshness and safety/i)).toBeInTheDocument();
     expect(screen.getByText("Allergen and dietary notes")).toBeInTheDocument();
-    expect(screen.getByText("Contains wheat")).toBeInTheDocument();
-    expect(screen.getByText("vegetarian")).toBeInTheDocument();
+    expect(screen.getByText("Wheat")).toBeInTheDocument();
+    expect(screen.getByText(/\(Contains\)/)).toBeInTheDocument();
+    expect(screen.queryByText("vegetarian")).not.toBeInTheDocument();
     expect(screen.getByText(/not guarantee/i)).toBeInTheDocument();
     expect(screen.queryByText(/allergen-free/i)).not.toBeInTheDocument();
     expect(screen.getByText("Nutrition estimate")).toBeInTheDocument();
-    expect(screen.getByText(/640 kcal per recipe \/ 320 kcal per serving/i)).toBeInTheDocument();
-    expect(screen.getByText(/24 g per recipe \/ 12 g per serving/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/1280 kcal for 4 servings \/ 320 kcal per serving/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/48 g for 4 servings \/ 12 g per serving/i)).toBeInTheDocument();
   });
 
   it("shows an error when portion preview fails", async () => {
@@ -390,15 +424,18 @@ describe("RecipeFormScreen", () => {
 
     fireEvent.change(screen.getByLabelText("Recipe title"), { target: { value: "Lemon pasta" } });
     fireEvent.change(screen.getByLabelText("Ingredient 1 name"), { target: { value: "Pasta" } });
+    fireEvent.change(screen.getByLabelText("Ingredient 1 quantity"), { target: { value: "100" } });
     fireEvent.change(screen.getByLabelText("Step 1 text"), {
       target: { value: "Boil pasta." },
     });
+    fireEvent.click(screen.getByLabelText("Template recipe"));
     fireEvent.click(screen.getByRole("button", { name: "Save recipe" }));
 
     await waitFor(() => {
       expect(createRecipe).toHaveBeenCalled();
       expect(onSaved).toHaveBeenCalledWith("recipe-1");
     });
+    expect(createRecipe.mock.calls[0][0]).toMatchObject({ isTemplate: true });
   });
 
   it("loads cookbook categories and saves the selected category path", async () => {
@@ -419,6 +456,7 @@ describe("RecipeFormScreen", () => {
     });
     fireEvent.change(screen.getByLabelText("Recipe title"), { target: { value: "Fast rice" } });
     fireEvent.change(screen.getByLabelText("Ingredient 1 name"), { target: { value: "Rice" } });
+    fireEvent.change(screen.getByLabelText("Ingredient 1 quantity"), { target: { value: "200" } });
     fireEvent.change(screen.getByLabelText("Step 1 text"), {
       target: { value: "Cook rice." },
     });
@@ -432,6 +470,60 @@ describe("RecipeFormScreen", () => {
       cookbookId: "cookbook-default",
       categoryPath: ["Dinner", "Quick meals"],
     });
+  });
+
+  it("keeps ingredient quantity as a blank mobile string until save validation", async () => {
+    const createRecipe = vi.fn(async () => ok(sampleRecipe));
+    const createView = render(
+      <RecipeFormScreen
+        cookbookUseCases={createCookbookUseCases()}
+        recipeUseCases={createRecipeUseCases({ createRecipe })}
+        mode="create"
+        onCancel={vi.fn()}
+        onSaved={vi.fn()}
+      />,
+    );
+
+    const quantityInput = screen.getByLabelText("Ingredient 1 quantity");
+    expect(quantityInput).toHaveValue("");
+    expect(quantityInput).toHaveAttribute("placeholder", "e.g. 250");
+
+    fireEvent.change(screen.getByLabelText("Recipe title"), { target: { value: "Pasta" } });
+    fireEvent.change(screen.getByLabelText("Ingredient 1 name"), { target: { value: "Pasta" } });
+    fireEvent.change(screen.getByLabelText("Step 1 text"), { target: { value: "Boil." } });
+    fireEvent.click(screen.getByRole("button", { name: "Save recipe" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Ingredient 1 quantity must be greater than zero.",
+    );
+
+    fireEvent.change(quantityInput, { target: { value: "abc" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save recipe" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Ingredient 1 quantity must be greater than zero.",
+    );
+
+    fireEvent.change(quantityInput, { target: { value: "250" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save recipe" }));
+
+    await waitFor(() => {
+      expect(createRecipe).toHaveBeenCalled();
+    });
+    expect(createRecipe.mock.calls[0][0].ingredients[0].quantity).toBe(250);
+
+    createView.unmount();
+
+    render(
+      <RecipeFormScreen
+        cookbookUseCases={createCookbookUseCases()}
+        recipeId="recipe-1"
+        recipeUseCases={createRecipeUseCases()}
+        mode="edit"
+        onCancel={vi.fn()}
+        onSaved={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByLabelText("Ingredient 1 quantity")).toHaveValue("100");
   });
 
   it("shows empty and unavailable cookbook category states", async () => {
@@ -509,37 +601,12 @@ describe("RecipeFormScreen", () => {
     fireEvent.change(screen.getByLabelText("Leftover ideas"), {
       target: { value: "Use with rice bowls." },
     });
-    fireEvent.click(screen.getByLabelText("Contains milk"));
-    fireEvent.change(screen.getByLabelText("Milk warning status"), {
-      target: { value: "userVerified" },
-    });
-    fireEvent.click(screen.getByLabelText("Contains sesame"));
-    fireEvent.change(screen.getByLabelText("Sesame warning status"), {
-      target: { value: "estimated" },
-    });
-    fireEvent.change(screen.getByLabelText("Dietary tags"), {
-      target: { value: "vegetarian, low sodium" },
-    });
-    fireEvent.change(screen.getByLabelText("Dietary tag warning status"), {
-      target: { value: "estimated" },
-    });
+    fireEvent.click(screen.getByLabelText("Milk allergen"));
     fireEvent.change(screen.getByLabelText("Calories amount"), {
       target: { value: "900" },
     });
-    fireEvent.change(screen.getByLabelText("Calories nutrition status"), {
-      target: { value: "estimated" },
-    });
-    fireEvent.change(screen.getByLabelText("Calories nutrition source"), {
-      target: { value: "Chef estimate" },
-    });
     fireEvent.change(screen.getByLabelText("Protein amount"), {
       target: { value: "45" },
-    });
-    fireEvent.change(screen.getByLabelText("Protein nutrition status"), {
-      target: { value: "userVerified" },
-    });
-    fireEvent.change(screen.getByLabelText("Protein nutrition source"), {
-      target: { value: "Package label" },
     });
 
     for (let index = 1; index < 10; index += 1) {
@@ -609,28 +676,101 @@ describe("RecipeFormScreen", () => {
       leftoverUse: "Use with rice bowls.",
     });
     expect(submittedRecipe.dietary).toEqual({
-      allergens: [
-        { allergen: "milk", status: "userVerified" },
-        { allergen: "sesame", status: "estimated" },
-      ],
-      dietaryTags: [
-        { label: "vegetarian", status: "estimated" },
-        { label: "low sodium", status: "estimated" },
-      ],
+      allergens: [{ allergen: "milk", status: "contains" }],
+      dietaryTags: [],
     });
     expect(submittedRecipe.nutrition).toEqual({
       calories: {
         amount: 900,
         unit: "kcal",
-        status: "estimated",
-        source: "Chef estimate",
       },
       protein: {
         amount: 45,
         unit: "g",
-        status: "userVerified",
-        source: "Package label",
       },
+    });
+  });
+
+  it("imports multiple template recipes as independent copied rows and saves merged metadata", async () => {
+    const createRecipe = vi.fn(async () => ok(sampleRecipe));
+    const listRecipes = vi.fn(async () => ok([sampleRecipe, templateRecipe, sauceTemplateRecipe]));
+
+    render(
+      <RecipeFormScreen
+        cookbookUseCases={createCookbookUseCases()}
+        recipeUseCases={createRecipeUseCases({ createRecipe, listRecipes })}
+        mode="create"
+        onCancel={vi.fn()}
+        onSaved={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByLabelText("Template recipe to import")).toHaveValue(
+      "recipe-template-dough",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Import template recipe" }));
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Pierogi dough imported as independent recipe rows.",
+    );
+    expect(screen.getByLabelText("Wheat allergen")).toBeChecked();
+    const firstNutritionTotals = within(screen.getByRole("table", { name: "Nutrition totals" }));
+    expect(
+      firstNutritionTotals.getByRole("row", {
+        name: /Calories 640 kcal 0 kcal 640 kcal 320 kcal/i,
+      }),
+    ).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Template recipe to import"), {
+      target: { value: "recipe-template-sauce" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Import template recipe" }));
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Tomato sauce imported as independent recipe rows.",
+    );
+    expect(screen.getByLabelText("Milk allergen")).toBeChecked();
+
+    fireEvent.click(screen.getByText("Pierogi dough ingredients"));
+    expect(screen.getByLabelText("Ingredient 1 name")).toHaveValue("Flour");
+    expect(screen.getByLabelText("Ingredient 1 group")).toHaveValue("Pierogi dough");
+    fireEvent.click(screen.getByText("Tomato sauce ingredients"));
+    expect(screen.getByLabelText("Ingredient 2 name")).toHaveValue("Tomato");
+    expect(screen.getByLabelText("Ingredient 2 group")).toHaveValue("Tomato sauce");
+    fireEvent.click(screen.getByText("Pierogi dough steps"));
+    expect(screen.getByLabelText("Step 1 text")).toHaveValue("Knead dough.");
+    fireEvent.click(screen.getByText("Tomato sauce steps"));
+    expect(screen.getByLabelText("Step 2 text")).toHaveValue("Simmer sauce.");
+
+    fireEvent.change(screen.getByLabelText("Recipe title"), { target: { value: "Pierogi" } });
+    fireEvent.change(screen.getByLabelText("Calories amount"), { target: { value: "100" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save recipe" }));
+
+    await waitFor(() => {
+      expect(createRecipe).toHaveBeenCalled();
+    });
+
+    expect(listRecipes).toHaveBeenCalled();
+    expect(createRecipe.mock.calls[0][0]).toMatchObject({
+      title: "Pierogi",
+      ingredients: [
+        { name: "Flour", quantity: 300, unit: "g", group: "Pierogi dough" },
+        { name: "Tomato", quantity: 200, unit: "g", group: "Tomato sauce" },
+      ],
+      steps: [
+        { position: 1, text: "Knead dough." },
+        { position: 2, text: "Simmer sauce." },
+      ],
+      dietary: {
+        allergens: [
+          { allergen: "milk", status: "contains" },
+          { allergen: "wheat", status: "contains" },
+        ],
+        dietaryTags: [],
+      },
+      nutrition: {
+        calories: { amount: 860, unit: "kcal" },
+        protein: { amount: 24, unit: "g" },
+      },
+      isTemplate: false,
     });
   });
 

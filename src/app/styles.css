@@ -263,6 +263,33 @@ h3 {
   padding: 8px 10px;
 }
 
+.imported-template-section {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #d8c8b6;
+  border-radius: 8px;
+  background: #f8fbf8;
+  padding: 0;
+}
+
+.imported-template-section summary {
+  display: flex;
+  min-height: 48px;
+  cursor: pointer;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  color: #233129;
+  font-weight: 900;
+}
+
+.imported-template-section__body {
+  display: grid;
+  gap: 12px;
+  padding: 0 12px 12px;
+}
+
 .full-span {
   grid-column: 1 / -1;
 }
@@ -424,6 +451,40 @@ h3 {
   gap: 12px;
 }
 
+.template-nutrition-panel {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #d8c8b6;
+  border-radius: 8px;
+  background: #f8fbf8;
+  padding: 12px;
+}
+
+.template-nutrition-panel h4 {
+  margin: 0;
+  color: #233129;
+}
+
+.nutrition-summary-wrap {
+  overflow-x: auto;
+}
+
+.nutrition-summary-table {
+  width: 100%;
+  min-width: 620px;
+  border-collapse: collapse;
+  border: 1px solid #e3d8ca;
+  background: #fffaf2;
+}
+
+.nutrition-summary-table th,
+.nutrition-summary-table td {
+  border-bottom: 1px solid #e3d8ca;
+  padding: 10px 12px;
+  text-align: left;
+  white-space: nowrap;
+}
+
 .dietary-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -432,6 +493,35 @@ h3 {
   border-radius: 8px;
   background: #fffaf2;
   padding: 10px;
+}
+
+.allergen-table-wrap {
+  overflow-x: auto;
+}
+
+.allergen-table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid #e3d8ca;
+  background: #fffaf2;
+}
+
+.allergen-table th,
+.allergen-table td {
+  border-bottom: 1px solid #e3d8ca;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.allergen-table td:last-child,
+.allergen-table th:last-child {
+  width: 110px;
+  text-align: center;
+}
+
+.allergen-table input {
+  width: 22px;
+  min-height: 22px;
 }
 
 .split-panel {

@@ -12,7 +12,7 @@ The browser smoke check confirms the app loads, navigates from recipes to cookbo
 ## Resilience Coverage
 
 - Local persistence writes a `lacucina:schema-version` marker.
-- IndexedDB schema v2 stores rich recipe, cookbook, and meal-plan records.
+- IndexedDB schema v3 stores rich recipe, cookbook, meal-plan, and recipe-component records.
 - Repository tests prove recipes, cookbooks, and meal plans survive repository restart against the IndexedDB-backed adapter.
 - Corrupt v1 migration records throw `LocalPersistenceError` instead of being silently ignored, and the migration keeps legacy records untouched on failure.
 - Application use cases map repository failures into user-visible unavailable states.

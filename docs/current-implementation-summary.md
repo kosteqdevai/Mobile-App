@@ -85,12 +85,14 @@ The browser app persists:
 
 - recipes;
 - cookbooks/categories;
-- meal plans.
+- meal plans;
+- template recipe flags on normal recipe records;
+- legacy reusable recipe component records from schema v3.
 
-Persistence uses IndexedDB schema v2 for rich records. The migration marker is:
+Persistence uses IndexedDB schema v3 for rich records. The migration marker is:
 
 ```text
-lacucina:schema-version = 2
+lacucina:schema-version = 3
 ```
 
 Legacy schema v1 collection keys:
@@ -99,13 +101,15 @@ Legacy schema v1 collection keys:
 - `lacucina:cookbooks`
 - `lacucina:meal-plans`
 
-Current schema v2 stores rich records in IndexedDB:
+Current schema v3 stores rich records in IndexedDB:
 
 - database: `lacucina`
-- version: `2`
-- stores: `recipes`, `cookbooks`, `mealPlans`
+- version: `3`
+- stores: `recipes`, `cookbooks`, `mealPlans`, `recipeComponents`
 
-After a successful v1-to-v2 migration, active rich records are copied into IndexedDB, `lacucina:schema-version = 2` is written, and legacy rich `localStorage` collection keys are removed. If legacy JSON is corrupt or IndexedDB writes fail, the migration leaves the v1 marker and legacy records untouched.
+After a successful v1-to-v3 migration, active rich records are copied into IndexedDB, `lacucina:schema-version = 3` is written, and legacy rich `localStorage` collection keys are removed. If legacy JSON is corrupt or IndexedDB writes fail, the migration leaves the v1 marker and legacy records untouched. Existing v2 data upgrades to v3 by adding the `recipeComponents` store without deleting recipes, cookbooks, or meal plans.
+
+On Android debug builds, this IndexedDB data belongs to package `com.lacucina.app`. It should survive update installs with `adb install -r` or `npm run android:install:debug`, but it is removed if the app is uninstalled, app storage is cleared, or the package id/signing lineage changes.
 
 Small local state still in `localStorage`:
 
@@ -328,7 +332,7 @@ Location: `src/features/recipes/domain/recipe.ts`
 `RecipeAllergenFlag`
 
 - `allergen: BigNineAllergen`
-- `status: WarningVerificationStatus`
+- `status: AllergenPresenceStatus`
 
 `RecipeDietaryFlag`
 
@@ -340,21 +344,12 @@ Location: `src/features/recipes/domain/recipe.ts`
 - `allergens: ReadonlyArray<RecipeAllergenFlag>`
 - `dietaryTags: ReadonlyArray<RecipeDietaryFlag>`
 
-`NutritionStatus`
-
-- `notCalculated`
-- `estimated`
-- `partiallyMapped`
-- `userVerified`
-
 `NutritionMetric`
 
 - `calories`
 - `protein`
 - `carbs`
 - `fat`
-- `fiber`
-- `sodium`
 
 `NutritionUnit`
 
@@ -366,8 +361,6 @@ Location: `src/features/recipes/domain/recipe.ts`
 
 - `amount: number`
 - `unit: NutritionUnit`
-- `status: NutritionStatus`
-- `source: string`
 
 `RecipeNutritionEstimate`
 
@@ -392,11 +385,12 @@ Location: `src/features/recipes/domain/recipe.ts`
 - `dietary?: RecipeDietaryMetadata`
 - `nutrition?: RecipeNutritionEstimate`
 - `isFavorite: boolean`
+- `isTemplate?: boolean`
 - `photo?: RecipePhoto`
 - `createdAt: string`
 - `updatedAt: string`
 
-`RecipeInput` is the input shape for creating/updating recipes. It allows optional `description`, `categoryPath`, `tags`, `notes`, `guidance`, `dietary`, `nutrition`, `isFavorite`, and `photo`.
+`RecipeInput` is the input shape for creating/updating recipes. It allows optional `description`, `categoryPath`, `tags`, `notes`, `guidance`, `dietary`, `nutrition`, `isFavorite`, `isTemplate`, and `photo`.
 
 ### Validation Errors
 
@@ -435,7 +429,7 @@ Location: `src/features/recipes/domain/recipe.ts`
 - Defaults missing tags to empty array.
 - Normalizes tags to lower-case unique values.
 - Normalizes guidance, dietary metadata, and nutrition source labels.
-- Defaults `isFavorite` to `false`.
+- Defaults `isFavorite` and `isTemplate` to `false`.
 - Returns `Result<Recipe, RecipeValidationError[]>`.
 
 ## Portion Scaling Domain
@@ -478,13 +472,13 @@ Location: `src/features/recipes/domain/nutrition.ts`
 
 `nutritionMetricDefinitions`
 
-- Defines calories, protein, carbs, fat, fiber, and sodium display labels and units.
+- Defines calories, protein, carbs, and fat display labels and units.
 
 Functions:
 
 - `getRecipeNutritionSummary(recipe)`
   - returns available nutrition values per recipe and per base serving;
-  - preserves status and source labels.
+  - labels values as manual estimates in the UI.
 - `getPlannedNutritionSummary(recipe, plannedServings)`
   - scales per-serving nutrition estimates to a planned serving count.
 - `formatNutritionAmount(amount)`
@@ -894,6 +888,7 @@ In-memory repositories:
 - `InMemoryRecipeRepository`
 - `InMemoryCookbookRepository`
 - `InMemoryMealPlanRepository`
+- `InMemoryRecipeComponentRepository`
 
 Legacy localStorage repositories:
 
@@ -901,17 +896,19 @@ Legacy localStorage repositories:
 - `LocalCookbookRepository`
 - `LocalMealPlanRepository`
 
-IndexedDB schema v2 repositories:
+IndexedDB schema v3 repositories:
 
 - `IndexedDbRecipeRepository`
 - `IndexedDbCookbookRepository`
 - `IndexedDbMealPlanRepository`
+- `IndexedDbRecipeComponentRepository`
 
 Mappers:
 
 - `recipeToRecord`, `recipeFromRecord`
 - `cookbookToRecord`, `cookbookFromRecord`
 - `mealPlanToRecord`, `mealPlanFromRecord`
+- `recipeComponentToRecord`, `recipeComponentFromRecord`
 
 Current mapper behavior is intentionally simple: records match domain shapes, are cloned on boundaries, and meal plan records are normalized so older loop-only plans gain a backward-compatible `customLoop` board.
 
@@ -926,6 +923,7 @@ Location: `src/app/providers/appDependencies.ts`
 - `recipeExportUseCases`
 - `cookbookUseCases`
 - `mealPlanUseCases`
+- `recipeComponentUseCases`
 
 Factory functions:
 
@@ -933,7 +931,7 @@ Factory functions:
   - creates in-memory repositories for tests and non-browser rendering.
 - `createBrowserAppDependencies(storage, database?)`
   - wraps the database in `MigratingLocalDatabase`.
-  - migrates schema v1 `localStorage` rich records to IndexedDB schema v2 before repository access.
+  - migrates schema v1 `localStorage` rich records to IndexedDB schema v3 before repository access.
   - wires IndexedDB repositories to browser storage.
   - keeps cook-session progress in `localStorage`.
   - wires web share adapter to `window.navigator`.
@@ -1021,8 +1019,9 @@ UI features:
 - guided cook mode with large step card, previous/next controls, completion checkbox, and persisted current step;
 - notes;
 - user-entered storage, reheating, prep-ahead, holding, and leftover guidance;
-- user-entered Big 9 allergen flags and dietary tags with verification status labels;
-- manual nutrition estimates per recipe and per serving with status/source labels;
+- user-entered Big 9 allergen flags where checked means contains;
+- template recipe marker when a recipe is reusable;
+- manual nutrition estimates scaled to the selected serving count with manual-estimate labels;
 - export recipe button.
 
 ### Recipe Form Screen
@@ -1049,6 +1048,8 @@ Form fields:
 - tags;
 - local photo reference;
 - difficulty;
+- template recipe checkbox;
+- template recipe import picker on create when templates exist, with multiple independent imports;
 - recipe notes;
 - prep-ahead notes;
 - refrigerator storage;
@@ -1057,12 +1058,9 @@ Form fields:
 - holding notes;
 - leftover ideas;
 - Big 9 allergen checkboxes;
-- per-allergen warning status;
-- comma-separated dietary tags;
-- dietary tag warning status;
-- calories, protein, carbs, fat, fiber, and sodium estimate amounts;
-- per-nutrition-value status;
-- per-nutrition-value source label;
+- collapsible imported template ingredient and step sections;
+- calories, protein, carbs, and fat estimate amounts;
+- imported template nutrition subtotal, manual addition subtotal, combined total, and per-serving summary;
 - favorite.
 
 Row controls:
@@ -1254,9 +1252,9 @@ Use these to guide culinary feedback:
 
 Use these to guide technical/product architecture feedback:
 
-- Should dynamic recipe rows get stable ingredient/step IDs before schema v3?
+- Should dynamic recipe rows get stable ingredient/step IDs before a future schema change?
 - What backup/export strategy should sit on top of IndexedDB before real users depend on it?
-- What migration strategy should be used after schema version `2`?
+- What migration strategy should be used after schema version `3`?
 - Should recipe category assignment be normalized through cookbook category IDs instead of a free-text `categoryPath`?
 - Should planner entries snapshot recipe title/servings at planning time, or always reference latest recipe data?
 - What is the right future boundary for auth/sync without polluting the local-first MVP?

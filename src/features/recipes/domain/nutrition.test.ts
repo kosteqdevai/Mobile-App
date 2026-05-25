@@ -5,7 +5,6 @@ import {
   formatNutritionAmount,
   getPlannedNutritionSummary,
   getRecipeNutritionSummary,
-  nutritionStatusLabel,
 } from "./nutrition";
 
 const recipe: Recipe = {
@@ -24,14 +23,10 @@ const recipe: Recipe = {
     calories: {
       amount: 500,
       unit: "kcal",
-      status: "estimated",
-      source: "Manual entry",
     },
     protein: {
       amount: 20,
       unit: "g",
-      status: "userVerified",
-      source: "Package label",
     },
   },
   createdAt: "2026-05-22T00:00:00.000Z",
@@ -39,7 +34,7 @@ const recipe: Recipe = {
 };
 
 describe("nutrition summaries", () => {
-  it("returns recipe and per-serving nutrition with status and source labels", () => {
+  it("returns manual recipe and per-serving nutrition estimates", () => {
     const summary = getRecipeNutritionSummary(recipe);
 
     expect(summary).toEqual([
@@ -47,15 +42,11 @@ describe("nutrition summaries", () => {
         label: "Calories",
         recipeAmount: 500,
         perServingAmount: 250,
-        status: "estimated",
-        source: "Manual entry",
       }),
       expect.objectContaining({
         label: "Protein",
         recipeAmount: 20,
         perServingAmount: 10,
-        status: "userVerified",
-        source: "Package label",
       }),
     ]);
   });
@@ -72,9 +63,8 @@ describe("nutrition summaries", () => {
     expect(recipe.nutrition?.calories?.amount).toBe(500);
   });
 
-  it("formats nutrition display values and status labels", () => {
+  it("formats nutrition display values", () => {
     expect(formatNutritionAmount(10)).toBe("10");
     expect(formatNutritionAmount(10.25)).toBe("10.3");
-    expect(nutritionStatusLabel("partiallyMapped")).toBe("Partially mapped");
   });
 });

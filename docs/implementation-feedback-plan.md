@@ -46,7 +46,20 @@ Sharing remains private text export/native share only. Nutrition and allergen wo
 6. Planning depth: add prep-ahead, storage, leftovers, a flexible planner board, and move-entry controls.
 7. Shopping list: generate a grocery list from planned recipes with source recipe references.
 8. Safe dietary context: add allergen and dietary flags before nutrition estimates, with verification status on every warning.
-9. Persistence and quality: move rich local data to IndexedDB schema v2 and add accessibility automation around dynamic forms.
+9. Persistence and quality: move rich local data to IndexedDB and add accessibility automation around dynamic forms.
+
+## Consolidated Ideas Roadmap
+
+`LaCucina_skonsolidowane_pomysly.md` adds the next refinement track after the current kitchen-assistant work:
+
+1. Fix ingredient quantity entry so mobile users type into a blank field and validation happens on save.
+2. Replace heavy allergen verification labels with a compact Big 9 checkbox table where checked means contains and blank means no stored allergen flag.
+3. Simplify manual macros to calories, protein, fat, and carbs without visible status/source controls.
+4. Expand ingredient unit choices with common US and practical recipe units, while keeping automatic unit conversion out of scope.
+5. Add Base Recipes as normal cookbook recipes marked as template recipes, importable into new recipes as independent copies with no linked updates or global sync.
+6. Let one new recipe import multiple templates, carry their checked allergens and manual nutrition into a template subtotal, and keep imported ingredients/steps collapsible so the user can focus on additions.
+
+These ideas map to GAP-049 through GAP-060 and preserve the same guardrails: private personal cookbook, local-only storage, no backend sync, no public publishing, no automatic nutrition inference, and no medical or allergy safety guarantees.
 
 ## Feedback to Gap Map
 
@@ -63,7 +76,7 @@ Sharing remains private text export/native share only. Nutrition and allergen wo
 | Shopping list generation from plan        | GAP-043 |
 | Allergen and dietary awareness baseline   | GAP-044 |
 | Manual nutrition estimate MVP             | GAP-045 |
-| IndexedDB schema v2 migration             | GAP-046 |
+| IndexedDB schema v2 baseline migration    | GAP-046 |
 | Accessibility automation                  | GAP-047 |
 
 ## Chef Recommendations
@@ -84,7 +97,7 @@ Only fields already supported by the current `Recipe` model should be implemente
 Dietary and nutrition work should land in this order:
 
 1. allergen flags and dietary tags;
-2. visible status on every warning: unverified, estimated, or user verified;
+2. simple allergen checkboxes where checked means contains and blank means no recorded claim;
 3. manual nutrition estimates with source/status labels;
 4. later automatic mapping only if a data source and privacy model are explicitly chosen.
 
@@ -99,7 +112,7 @@ The current layered architecture remains the correct contract:
 - repositories hide persistence details;
 - presentation calls use cases and never writes storage directly.
 
-The technical direction remains local-first. Rich recipe, cookbook, and meal-plan records now belong in IndexedDB schema v2, while `localStorage` is reserved for migration markers and small UI state. Future image blobs, backups, and mobile storage adapters should build from that boundary.
+The technical direction remains local-first. Rich recipe, cookbook, meal-plan, and legacy recipe-component records belong in IndexedDB schema v3, while `localStorage` is reserved for migration markers and small UI state. The primary reusable-base UX now uses normal recipe records marked as templates. Future image blobs, backups, and mobile storage adapters should build from that boundary.
 
 ## Acceptance Notes
 

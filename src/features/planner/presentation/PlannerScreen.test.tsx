@@ -24,14 +24,10 @@ const sampleRecipe: Recipe = {
     calories: {
       amount: 400,
       unit: "kcal",
-      status: "estimated",
-      source: "Manual entry",
     },
     protein: {
       amount: 20,
       unit: "g",
-      status: "estimated",
-      source: "Manual entry",
     },
   },
   isFavorite: false,

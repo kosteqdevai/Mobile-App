@@ -16,6 +16,7 @@ const recipe: Recipe = {
   tags: [],
   difficulty: "beginner",
   isFavorite: false,
+  isTemplate: false,
   createdAt: "2026-05-22T00:00:00.000Z",
   updatedAt: "2026-05-22T00:00:00.000Z",
 };
@@ -23,6 +24,13 @@ const recipe: Recipe = {
 describe("recipe data contracts", () => {
   it("round trips recipes through records", () => {
     expect(recipeFromRecord(recipeToRecord(recipe))).toEqual(recipe);
+  });
+
+  it("loads legacy records without template flags as normal recipes", () => {
+    const legacyRecord = { ...recipe };
+    delete legacyRecord.isTemplate;
+
+    expect(recipeFromRecord(legacyRecord as Recipe).isTemplate).toBe(false);
   });
 
   it("stores recipes through the in-memory repository contract", async () => {

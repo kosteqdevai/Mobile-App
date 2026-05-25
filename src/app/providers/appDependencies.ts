@@ -24,6 +24,13 @@ import { InMemoryMealPlanRepository } from "../../features/planner/data/InMemory
 import { mealPlanToRecord } from "../../features/planner/data/mealPlanMapper";
 import type { MealPlan } from "../../features/planner/domain/mealPlan";
 import {
+  createRecipeComponentUseCases,
+  type RecipeComponentUseCases,
+} from "../../features/recipe-components/application/recipeComponentUseCases";
+import type { RecipeComponentRepository } from "../../features/recipe-components/application/RecipeComponentRepository";
+import { IndexedDbRecipeComponentRepository } from "../../features/recipe-components/data/IndexedDbRecipeComponentRepository";
+import { InMemoryRecipeComponentRepository } from "../../features/recipe-components/data/InMemoryRecipeComponentRepository";
+import {
   createRecipeUseCases,
   type RecipeUseCases,
 } from "../../features/recipes/application/recipeUseCases";
@@ -48,7 +55,7 @@ import { InMemoryRecipeRepository } from "../../features/recipes/data/InMemoryRe
 import { recipeToRecord } from "../../features/recipes/data/recipeMapper";
 import { WebRecipeSharePort } from "../../features/recipes/data/WebRecipeSharePort";
 import type { Recipe } from "../../features/recipes/domain/recipe";
-import { migrateLocalDataToSchemaV2 } from "./localDataMigration";
+import { migrateLocalDataToSchemaV3 } from "./localDataMigration";
 
 export type AppDependencies = {
   appConfig: typeof appConfig;
@@ -57,6 +64,7 @@ export type AppDependencies = {
   cookSessionUseCases: CookSessionUseCases;
   cookbookUseCases: CookbookUseCases;
   mealPlanUseCases: MealPlanUseCases;
+  recipeComponentUseCases: RecipeComponentUseCases;
 };
 
 const seedRecipe: Recipe = {
@@ -74,6 +82,7 @@ const seedRecipe: Recipe = {
   difficulty: "beginner",
   notes: "Use leftover sauce if you have it.",
   isFavorite: true,
+  isTemplate: false,
   createdAt: "2026-05-22T00:00:00.000Z",
   updatedAt: "2026-05-22T00:00:00.000Z",
 };
@@ -126,12 +135,14 @@ export function createDefaultAppDependencies(): AppDependencies {
   const cookSessionStore = new MemoryCookSessionStore();
   const cookbookRepository = new InMemoryCookbookRepository([seedCookbook]);
   const mealPlanRepository = new InMemoryMealPlanRepository([seedPlan]);
+  const recipeComponentRepository = new InMemoryRecipeComponentRepository();
 
   return createAppDependencies(
     recipeRepository,
     cookSessionStore,
     cookbookRepository,
     mealPlanRepository,
+    recipeComponentRepository,
     createMemoryRecipeSharePort(),
   );
 }
@@ -141,13 +152,14 @@ export function createBrowserAppDependencies(
   database: LocalDatabase = new BrowserIndexedDbDatabase(),
 ): AppDependencies {
   const migratingDatabase = new MigratingLocalDatabase(database, () =>
-    migrateLocalDataToSchemaV2({
+    migrateLocalDataToSchemaV3({
       storage,
       database,
       seeds: {
         recipes: [recipeToRecord(seedRecipe)],
         cookbooks: [cookbookToRecord(seedCookbook)],
         mealPlans: [mealPlanToRecord(seedPlan)],
+        recipeComponents: [],
       },
     }),
   );
@@ -156,12 +168,14 @@ export function createBrowserAppDependencies(
   const cookSessionStore = new LocalCookSessionStore(storage);
   const cookbookRepository = new IndexedDbCookbookRepository(migratingDatabase);
   const mealPlanRepository = new IndexedDbMealPlanRepository(migratingDatabase);
+  const recipeComponentRepository = new IndexedDbRecipeComponentRepository(migratingDatabase);
 
   return createAppDependencies(
     recipeRepository,
     cookSessionStore,
     cookbookRepository,
     mealPlanRepository,
+    recipeComponentRepository,
     new WebRecipeSharePort(window.navigator),
   );
 }
@@ -171,6 +185,7 @@ function createAppDependencies(
   cookSessionStore: CookSessionStore,
   cookbookRepository: CookbookRepository,
   mealPlanRepository: MealPlanRepository,
+  recipeComponentRepository: RecipeComponentRepository,
   recipeSharePort: RecipeSharePort,
 ): AppDependencies {
   const recipeUseCases = createRecipeUseCases(recipeRepository);
@@ -182,6 +197,7 @@ function createAppDependencies(
     cookSessionUseCases: createCookSessionUseCases(cookSessionStore),
     cookbookUseCases: createCookbookUseCases(cookbookRepository),
     mealPlanUseCases: createMealPlanUseCases(mealPlanRepository, recipeRepository),
+    recipeComponentUseCases: createRecipeComponentUseCases(recipeComponentRepository),
   };
 }
 

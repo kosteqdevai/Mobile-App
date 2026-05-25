@@ -138,6 +138,7 @@ export function RecipeListScreen({
               <span className="recipe-card__meta">
                 {recipe.baseServings} servings · {recipe.difficulty}
               </span>
+              {recipe.isTemplate ? <span className="pill">Template recipe</span> : null}
             </button>
             <button
               className="secondary-button"

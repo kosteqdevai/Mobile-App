@@ -4,18 +4,13 @@ import { EmptyView, ErrorView, LoadingView } from "../../../core/presentation/St
 import type { CookSession, CookSessionUseCases } from "../application/cookSessionUseCases";
 import type { RecipeExportUseCases } from "../application/recipeExportUseCases";
 import type { RecipeUseCases } from "../application/recipeUseCases";
-import {
-  formatNutritionAmount,
-  getRecipeNutritionSummary,
-  nutritionStatusLabel,
-} from "../domain/nutrition";
+import { formatNutritionAmount, getPlannedNutritionSummary } from "../domain/nutrition";
 import { formatScaledQuantity, type ScaledIngredient } from "../domain/portionScaling";
 import type {
   BigNineAllergen,
   Recipe,
   RecipeDietaryMetadata,
   RecipePracticalGuidance,
-  WarningVerificationStatus,
 } from "../domain/recipe";
 
 type RecipeDetailScreenProps = {
@@ -273,7 +268,7 @@ export function RecipeDetailScreen({
 
   const guidanceItems = guidanceEntries(detailState.recipe.guidance);
   const dietaryItems = dietaryEntries(detailState.recipe.dietary);
-  const nutritionItems = getRecipeNutritionSummary(detailState.recipe);
+  const nutritionItems = getPlannedNutritionSummary(detailState.recipe, targetServings);
   const ingredientGroups = groupScaledIngredients(detailState.scaledIngredients);
 
   return (
@@ -291,6 +286,7 @@ export function RecipeDetailScreen({
         <p className="section-kicker">{detailState.recipe.categoryPath.join(" / ") || "Recipe"}</p>
         <h2 id="recipe-detail-title">{detailState.recipe.title}</h2>
         <p>{detailState.recipe.description}</p>
+        {detailState.recipe.isTemplate ? <p className="pill">Template recipe</p> : null}
       </div>
 
       <label>
@@ -413,13 +409,11 @@ export function RecipeDetailScreen({
             {nutritionItems.map((item) => (
               <li key={item.metric}>
                 <span>
-                  <strong>{item.label}</strong> {formatNutritionAmount(item.recipeAmount)}{" "}
-                  {item.unit} per recipe / {formatNutritionAmount(item.perServingAmount)}{" "}
-                  {item.unit} per serving
-                  <span className="muted-text">
-                    {" "}
-                    ({nutritionStatusLabel(item.status)}, {item.source})
-                  </span>
+                  <strong>{item.label}</strong>{" "}
+                  {formatNutritionAmount(item.plannedAmount ?? item.recipeAmount)} {item.unit} for{" "}
+                  {formatNutritionAmount(targetServings)} servings /{" "}
+                  {formatNutritionAmount(item.perServingAmount)} {item.unit} per serving
+                  <span className="muted-text"> (manual estimate)</span>
                 </span>
               </li>
             ))}
@@ -481,15 +475,15 @@ function guidanceEntries(guidance: RecipePracticalGuidance | undefined) {
 }
 
 const allergenLabels: Record<BigNineAllergen, string> = {
-  milk: "Contains milk",
-  eggs: "Contains eggs",
-  fish: "Contains fish",
-  crustaceanShellfish: "Contains crustacean shellfish",
-  treeNuts: "Contains tree nuts",
-  peanuts: "Contains peanuts",
-  wheat: "Contains wheat",
-  soybeans: "Contains soybeans",
-  sesame: "Contains sesame",
+  milk: "Milk",
+  eggs: "Eggs",
+  fish: "Fish",
+  crustaceanShellfish: "Crustacean shellfish",
+  treeNuts: "Tree nuts",
+  peanuts: "Peanuts",
+  wheat: "Wheat",
+  soybeans: "Soybeans",
+  sesame: "Sesame",
 };
 
 function dietaryEntries(dietary: RecipeDietaryMetadata | undefined) {
@@ -498,18 +492,24 @@ function dietaryEntries(dietary: RecipeDietaryMetadata | undefined) {
   }
 
   return [
-    ...dietary.allergens.map((flag) => ({
-      label: allergenLabels[flag.allergen],
-      status: flag.status,
-    })),
-    ...dietary.dietaryTags.map((flag) => ({
-      label: flag.label,
-      status: flag.status,
-    })),
+    ...dietary.allergens
+      .filter((flag) => flag.status === "contains")
+      .map((flag) => ({
+        label: allergenLabels[flag.allergen],
+        status: flag.status,
+      })),
   ];
 }
 
-function verificationStatusLabel(status: WarningVerificationStatus) {
+function verificationStatusLabel(status: string) {
+  if (status === "contains") {
+    return "Contains";
+  }
+
+  if (status === "doesNotContain") {
+    return "Does not contain";
+  }
+
   if (status === "userVerified") {
     return "User verified";
   }

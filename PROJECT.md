@@ -59,6 +59,8 @@ The latest implementation review recommends keeping LaCucina private and local-f
 
 The next-build feedback plan lives in [docs/implementation-feedback-plan.md](docs/implementation-feedback-plan.md). It explicitly keeps public publishing, creator profiles, social feed, marketplace, subscriptions, backend sync, AI-first generation, and clinical diet advice out of the immediate scope.
 
+The consolidated product ideas in `LaCucina_skonsolidowane_pomysly.md` refine the next local-first build with template recipes, simpler allergen and macro entry, a mobile-friendly quantity field, and a wider US/practical ingredient unit list. These ideas remain private, local-only, and non-clinical: Base Recipes are normal cookbook recipes marked as templates and import as independent copies, allergen fields are user-entered checkboxes where checked means contains, macro fields are manual B/T/W plus optional calories, and US units are selectable labels without automatic conversion.
+
 ## MVP implementation contract
 
 Detailed MVP contracts:

@@ -20,6 +20,7 @@ describe("AppRoutes", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Planner" }));
     expect(await screen.findByRole("heading", { name: "Planner" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Components" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Recipes" }));
     fireEvent.click(await screen.findByRole("button", { name: /Tomato rice/i }));

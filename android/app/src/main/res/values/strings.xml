@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">LaCucina</string>
+    <string name="title_activity_main">LaCucina</string>
+    <string name="package_name">com.lacucina.app</string>
+    <string name="custom_url_scheme">com.lacucina.app</string>
+</resources>

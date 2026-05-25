@@ -19,8 +19,8 @@ MVP user data may include:
 - ingredients and preparation steps;
 - tags, notes, favorites, timing, and difficulty;
 - user-entered prep-ahead, storage, reheating, holding, and leftover guidance;
-- user-entered allergen flags, dietary tags, and verification status labels;
-- user-entered or estimated nutrition values with status and source labels;
+- user-entered allergen flags and dietary tags;
+- user-entered manual nutrition values;
 - cookbook/category structure;
 - recurring meal plan entries;
 - one local photo per recipe.

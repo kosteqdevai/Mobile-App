@@ -9,19 +9,19 @@ import {
 } from "../../cookbooks/domain/categoryPathOptions";
 import type { RecipeUseCases } from "../application/recipeUseCases";
 import type {
+  AllergenPresenceStatus,
   BigNineAllergen,
   Ingredient,
   NutritionMetric,
-  NutritionStatus,
   Recipe,
   RecipeDietaryMetadata,
   RecipeDifficulty,
   RecipeInput,
   RecipeNutritionEstimate,
   RecipePracticalGuidance,
-  WarningVerificationStatus,
 } from "../domain/recipe";
-import { nutritionMetricDefinitions } from "../domain/nutrition";
+import { ingredientUnitOptions } from "../domain/ingredientUnits";
+import { formatNutritionAmount, nutritionMetricDefinitions } from "../domain/nutrition";
 
 type RecipeFormScreenProps = {
   recipeUseCases: RecipeUseCases;
@@ -43,18 +43,32 @@ type CategoryPickerState =
   | { status: "ready"; options: ReadonlyArray<CategoryPathOption> }
   | { status: "error"; message: string };
 
+type TemplateImportState =
+  | { status: "loading" }
+  | {
+      status: "ready";
+      templates: ReadonlyArray<Recipe>;
+      error?: string;
+      message?: string;
+    }
+  | { status: "error"; message: string };
+
 type IngredientFormRow = {
   id: string;
   name: string;
-  quantity: number;
+  quantity: string;
   unit: string;
   group: string;
   note: string;
+  sourceTemplateId?: string;
+  sourceTemplateTitle?: string;
 };
 
 type StepFormRow = {
   id: string;
   text: string;
+  sourceTemplateId?: string;
+  sourceTemplateTitle?: string;
 };
 
 type PracticalGuidanceFormValues = {
@@ -67,23 +81,26 @@ type PracticalGuidanceFormValues = {
 };
 
 type AllergenFormValue = {
-  selected: boolean;
-  status: WarningVerificationStatus;
+  status: AllergenPresenceStatus;
 };
 
 type DietaryFormValues = {
   allergens: Record<BigNineAllergen, AllergenFormValue>;
-  dietaryTags: string;
-  dietaryTagStatus: WarningVerificationStatus;
 };
 
 type NutritionMetricFormValue = {
   amount: string;
-  status: NutritionStatus;
-  source: string;
 };
 
 type NutritionFormValues = Record<NutritionMetric, NutritionMetricFormValue>;
+
+type ImportedTemplateFormValue = {
+  id: string;
+  title: string;
+  nutrition?: RecipeNutritionEstimate;
+  ingredientsExpanded: boolean;
+  stepsExpanded: boolean;
+};
 
 type RecipeFormValues = {
   title: string;
@@ -101,11 +118,13 @@ type RecipeFormValues = {
   guidance: PracticalGuidanceFormValues;
   dietary: DietaryFormValues;
   nutrition: NutritionFormValues;
+  importedTemplates: ImportedTemplateFormValue[];
   isFavorite: boolean;
+  isTemplate: boolean;
   photoLocalId: string;
 };
 
-const commonIngredientUnits = ["g", "kg", "ml", "l", "tsp", "tbsp", "cup", "pcs", "cloves"];
+const commonIngredientUnits = ingredientUnitOptions;
 
 const allergenOptions: ReadonlyArray<{ value: BigNineAllergen; label: string }> = [
   { value: "milk", label: "Milk" },
@@ -117,22 +136,6 @@ const allergenOptions: ReadonlyArray<{ value: BigNineAllergen; label: string }> 
   { value: "wheat", label: "Wheat" },
   { value: "soybeans", label: "Soybeans" },
   { value: "sesame", label: "Sesame" },
-];
-
-const warningStatusOptions: ReadonlyArray<{
-  value: WarningVerificationStatus;
-  label: string;
-}> = [
-  { value: "unverified", label: "Unverified" },
-  { value: "estimated", label: "Estimated" },
-  { value: "userVerified", label: "User verified" },
-];
-
-const nutritionStatusOptions: ReadonlyArray<{ value: NutritionStatus; label: string }> = [
-  { value: "estimated", label: "Estimated" },
-  { value: "partiallyMapped", label: "Partially mapped" },
-  { value: "userVerified", label: "User verified" },
-  { value: "notCalculated", label: "Not calculated" },
 ];
 
 let rowIdSequence = 0;
@@ -152,6 +155,10 @@ export function RecipeFormScreen({
   const [categoryPickerState, setCategoryPickerState] = useState<CategoryPickerState>({
     status: "loading",
   });
+  const [templateImportState, setTemplateImportState] = useState<TemplateImportState>({
+    status: "loading",
+  });
+  const [selectedTemplateRecipeId, setSelectedTemplateRecipeId] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -230,6 +237,37 @@ export function RecipeFormScreen({
     };
   }, [mode, recipeId, recipeUseCases]);
 
+  useEffect(() => {
+    if (mode !== "create") {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadTemplates() {
+      const result = await recipeUseCases.listRecipes();
+
+      if (cancelled) {
+        return;
+      }
+
+      if (!result.ok) {
+        setTemplateImportState({ status: "error", message: result.error.message });
+        return;
+      }
+
+      const templates = result.value.filter((recipe) => recipe.isTemplate);
+      setTemplateImportState({ status: "ready", templates });
+      setSelectedTemplateRecipeId((currentId) => currentId || templates[0]?.id || "");
+    }
+
+    void loadTemplates();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, recipeUseCases]);
+
   if (formState.status === "loading") {
     return <LoadingView title="Loading form" />;
   }
@@ -244,8 +282,20 @@ export function RecipeFormScreen({
     );
   }
 
+  const readyFormValues = formState.values;
+
   async function saveRecipe() {
     if (formState.status !== "ready") {
+      return;
+    }
+
+    const localValidationMessage = validateRecipeFormValues(formState.values);
+
+    if (localValidationMessage) {
+      setFormState({
+        ...formState,
+        error: localValidationMessage,
+      });
       return;
     }
 
@@ -347,16 +397,6 @@ export function RecipeFormScreen({
     }));
   }
 
-  function updateDietary(nextDietary: Partial<Omit<DietaryFormValues, "allergens">>) {
-    updateFormValues((values) => ({
-      ...values,
-      dietary: {
-        ...values.dietary,
-        ...nextDietary,
-      },
-    }));
-  }
-
   function updateNutrition(
     metric: NutritionMetric,
     nextNutrition: Partial<NutritionMetricFormValue>,
@@ -391,6 +431,329 @@ export function RecipeFormScreen({
       categoryPath: selectedOption.path.join(" / "),
     });
   }
+
+  function updateImportedTemplateExpansion(
+    templateId: string,
+    field: "ingredientsExpanded" | "stepsExpanded",
+    expanded: boolean,
+  ) {
+    updateFormValues((values) => ({
+      ...values,
+      importedTemplates: values.importedTemplates.map((template) =>
+        template.id === templateId ? { ...template, [field]: expanded } : template,
+      ),
+    }));
+  }
+
+  function importSelectedTemplateRecipe() {
+    if (templateImportState.status !== "ready" || selectedTemplateRecipeId.trim().length === 0) {
+      return;
+    }
+
+    const template = templateImportState.templates.find(
+      (recipe) => recipe.id === selectedTemplateRecipeId,
+    );
+
+    if (!template) {
+      setTemplateImportState({
+        ...templateImportState,
+        error: "Selected template recipe is no longer available.",
+        message: undefined,
+      });
+      return;
+    }
+
+    if (readyFormValues.importedTemplates.some((imported) => imported.id === template.id)) {
+      setTemplateImportState({
+        ...templateImportState,
+        error: "That template recipe is already imported.",
+        message: undefined,
+      });
+      return;
+    }
+
+    const alreadyImportedTemplateIds = new Set(
+      readyFormValues.importedTemplates.map((imported) => imported.id),
+    );
+    const nextSelectedTemplate = templateImportState.templates.find(
+      (recipe) => recipe.id !== template.id && !alreadyImportedTemplateIds.has(recipe.id),
+    );
+
+    updateFormValues((values) => ({
+      ...values,
+      importedTemplates: [
+        ...values.importedTemplates,
+        {
+          id: template.id,
+          title: template.title,
+          nutrition: template.nutrition,
+          ingredientsExpanded: false,
+          stepsExpanded: false,
+        },
+      ],
+      ingredients: [
+        ...(isBlankIngredientPlaceholder(values.ingredients) ? [] : values.ingredients),
+        ...template.ingredients.map((ingredient) =>
+          ingredientToFormRow(
+            {
+              ...ingredient,
+              group: ingredient.group?.trim() || template.title,
+            },
+            template,
+          ),
+        ),
+      ],
+      steps: [
+        ...(isBlankStepPlaceholder(values.steps) && template.steps.length > 0 ? [] : values.steps),
+        ...[...template.steps]
+          .sort((firstStep, secondStep) => firstStep.position - secondStep.position)
+          .map((step) => createStepRow({ text: step.text }, template)),
+      ],
+      prepTimeMinutes:
+        values.prepTimeMinutes === 0 ? (template.prepTimeMinutes ?? 0) : values.prepTimeMinutes,
+      cookTimeMinutes:
+        values.cookTimeMinutes === 0 ? (template.cookTimeMinutes ?? 0) : values.cookTimeMinutes,
+      notes: values.notes.trim().length === 0 ? (template.notes ?? "") : values.notes,
+      guidance: isEmptyGuidanceValues(values.guidance)
+        ? guidanceToFormValues(template.guidance)
+        : values.guidance,
+      dietary: mergeTemplateAllergens(values.dietary, template.dietary),
+    }));
+    setTemplateImportState({
+      ...templateImportState,
+      error: undefined,
+      message: `${template.title} imported as independent recipe rows.`,
+    });
+    setSelectedTemplateRecipeId(nextSelectedTemplate?.id ?? "");
+  }
+
+  function getIngredientRowNumber(row: IngredientFormRow) {
+    return readyFormValues.ingredients.findIndex((ingredient) => ingredient.id === row.id) + 1;
+  }
+
+  function getStepRowNumber(row: StepFormRow) {
+    return readyFormValues.steps.findIndex((step) => step.id === row.id) + 1;
+  }
+
+  function renderIngredientRow(ingredient: IngredientFormRow) {
+    const index = getIngredientRowNumber(ingredient) - 1;
+
+    return (
+      <fieldset className="collection-row" key={ingredient.id}>
+        <legend>Ingredient {index + 1}</legend>
+        <div className="form-grid">
+          <label>
+            <span>Name</span>
+            <input
+              aria-label={`Ingredient ${index + 1} name`}
+              value={ingredient.name}
+              onChange={(event) => updateIngredient(ingredient.id, { name: event.target.value })}
+            />
+          </label>
+          <label>
+            <span>Quantity</span>
+            <input
+              aria-label={`Ingredient ${index + 1} quantity`}
+              inputMode="decimal"
+              placeholder="e.g. 250"
+              type="text"
+              value={ingredient.quantity}
+              onChange={(event) =>
+                updateIngredient(ingredient.id, { quantity: event.target.value })
+              }
+            />
+          </label>
+          <label>
+            <span>Unit</span>
+            <select
+              aria-label={`Ingredient ${index + 1} unit`}
+              value={ingredient.unit}
+              onChange={(event) => updateIngredient(ingredient.id, { unit: event.target.value })}
+            >
+              {unitOptionsFor(ingredient.unit).map((unit) => (
+                <option key={unit} value={unit}>
+                  {unit}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>Group</span>
+            <input
+              aria-label={`Ingredient ${index + 1} group`}
+              placeholder="Sauce, main, garnish"
+              value={ingredient.group}
+              onChange={(event) => updateIngredient(ingredient.id, { group: event.target.value })}
+            />
+          </label>
+          <label className="full-span">
+            <span>Prep note</span>
+            <input
+              aria-label={`Ingredient ${index + 1} prep note`}
+              placeholder="diced, divided, optional"
+              value={ingredient.note}
+              onChange={(event) => updateIngredient(ingredient.id, { note: event.target.value })}
+            />
+          </label>
+        </div>
+        <div className="collection-row__actions">
+          <button
+            className="secondary-button"
+            type="button"
+            disabled={index === 0}
+            onClick={() =>
+              updateFormValues((values) => ({
+                ...values,
+                ingredients: moveRow(values.ingredients, ingredient.id, -1),
+              }))
+            }
+          >
+            Move up
+          </button>
+          <button
+            className="secondary-button"
+            type="button"
+            disabled={index === readyFormValues.ingredients.length - 1}
+            onClick={() =>
+              updateFormValues((values) => ({
+                ...values,
+                ingredients: moveRow(values.ingredients, ingredient.id, 1),
+              }))
+            }
+          >
+            Move down
+          </button>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() =>
+              updateFormValues((values) => ({
+                ...values,
+                ingredients: duplicateIngredient(values.ingredients, ingredient.id),
+              }))
+            }
+          >
+            Duplicate
+          </button>
+          <button
+            className="secondary-button"
+            type="button"
+            disabled={readyFormValues.ingredients.length === 1}
+            onClick={() =>
+              updateFormValues((values) => ({
+                ...values,
+                ingredients: removeRow(values.ingredients, ingredient.id, createIngredientRow),
+              }))
+            }
+          >
+            Remove
+          </button>
+        </div>
+      </fieldset>
+    );
+  }
+
+  function renderStepRow(step: StepFormRow) {
+    const index = getStepRowNumber(step) - 1;
+
+    return (
+      <fieldset className="collection-row" key={step.id}>
+        <legend>Step {index + 1}</legend>
+        <label>
+          <span>Instruction</span>
+          <textarea
+            aria-label={`Step ${index + 1} text`}
+            value={step.text}
+            onChange={(event) => updateStep(step.id, { text: event.target.value })}
+          />
+        </label>
+        <div className="collection-row__actions">
+          <button
+            className="secondary-button"
+            type="button"
+            disabled={index === 0}
+            onClick={() =>
+              updateFormValues((values) => ({
+                ...values,
+                steps: moveRow(values.steps, step.id, -1),
+              }))
+            }
+          >
+            Move up
+          </button>
+          <button
+            className="secondary-button"
+            type="button"
+            disabled={index === readyFormValues.steps.length - 1}
+            onClick={() =>
+              updateFormValues((values) => ({
+                ...values,
+                steps: moveRow(values.steps, step.id, 1),
+              }))
+            }
+          >
+            Move down
+          </button>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() =>
+              updateFormValues((values) => ({
+                ...values,
+                steps: duplicateStep(values.steps, step.id),
+              }))
+            }
+          >
+            Duplicate
+          </button>
+          <button
+            className="secondary-button"
+            type="button"
+            disabled={readyFormValues.steps.length === 1}
+            onClick={() =>
+              updateFormValues((values) => ({
+                ...values,
+                steps: removeRow(values.steps, step.id, createStepRow),
+              }))
+            }
+          >
+            Remove
+          </button>
+        </div>
+      </fieldset>
+    );
+  }
+
+  const importedTemplateIds = new Set(
+    readyFormValues.importedTemplates.map((template) => template.id),
+  );
+  const availableTemplateRecipes =
+    templateImportState.status === "ready"
+      ? templateImportState.templates.filter((template) => !importedTemplateIds.has(template.id))
+      : [];
+  const manualIngredientRows = readyFormValues.ingredients.filter(
+    (ingredient) => !ingredient.sourceTemplateId,
+  );
+  const importedIngredientGroups = readyFormValues.importedTemplates
+    .map((template) => ({
+      template,
+      rows: readyFormValues.ingredients.filter(
+        (ingredient) => ingredient.sourceTemplateId === template.id,
+      ),
+    }))
+    .filter((group) => group.rows.length > 0);
+  const manualStepRows = readyFormValues.steps.filter((step) => !step.sourceTemplateId);
+  const importedStepGroups = readyFormValues.importedTemplates
+    .map((template) => ({
+      template,
+      rows: readyFormValues.steps.filter((step) => step.sourceTemplateId === template.id),
+    }))
+    .filter((group) => group.rows.length > 0);
+  const templateNutritionTotals = nutritionTotalsFromImportedTemplates(
+    readyFormValues.importedTemplates,
+  );
+  const manualNutritionTotals = nutritionTotalsFromFormValues(readyFormValues.nutrition);
+  const totalNutrition = addNutritionTotals(templateNutritionTotals, manualNutritionTotals);
 
   return (
     <section className="screen-stack" aria-labelledby="recipe-form-title">
@@ -457,128 +820,116 @@ export function RecipeFormScreen({
           </button>
         </div>
 
-        {formState.values.ingredients.map((ingredient, index) => (
-          <fieldset className="collection-row" key={ingredient.id}>
-            <legend>Ingredient {index + 1}</legend>
+        {manualIngredientRows.map((ingredient) => renderIngredientRow(ingredient))}
+        {importedIngredientGroups.map((group) => (
+          <details
+            className="imported-template-section"
+            key={group.template.id}
+            open={group.template.ingredientsExpanded}
+            onToggle={(event) =>
+              updateImportedTemplateExpansion(
+                group.template.id,
+                "ingredientsExpanded",
+                event.currentTarget.open,
+              )
+            }
+          >
+            <summary>
+              <span>{group.template.title} ingredients</span>
+              <span className="muted-text">{group.rows.length} copied rows</span>
+            </summary>
+            <div className="imported-template-section__body">
+              {group.rows.map((ingredient) => renderIngredientRow(ingredient))}
+            </div>
+          </details>
+        ))}
+      </section>
+
+      {mode === "create" ? (
+        <section className="collection-editor" aria-labelledby="template-import-title">
+          <div className="collection-editor__header">
+            <div>
+              <p className="section-kicker">Reusable prep</p>
+              <h3 id="template-import-title">Start from template recipe</h3>
+            </div>
+          </div>
+
+          {templateImportState.status === "loading" ? (
+            <div className="state-view" role="status">
+              <p className="state-view__title">Loading template recipes</p>
+            </div>
+          ) : null}
+
+          {templateImportState.status === "error" ? (
+            <ErrorView title="Template recipes unavailable" message={templateImportState.message} />
+          ) : null}
+
+          {templateImportState.status === "ready" && templateImportState.templates.length === 0 ? (
+            <EmptyView
+              title="No template recipes"
+              message="Mark a saved recipe as a template before importing repeated ingredients and steps."
+            />
+          ) : null}
+
+          {templateImportState.status === "ready" && availableTemplateRecipes.length > 0 ? (
             <div className="form-grid">
               <label>
-                <span>Name</span>
-                <input
-                  aria-label={`Ingredient ${index + 1} name`}
-                  value={ingredient.name}
-                  onChange={(event) =>
-                    updateIngredient(ingredient.id, { name: event.target.value })
-                  }
-                />
-              </label>
-              <label>
-                <span>Quantity</span>
-                <input
-                  aria-label={`Ingredient ${index + 1} quantity`}
-                  min="0.01"
-                  step="0.01"
-                  type="number"
-                  value={ingredient.quantity}
-                  onChange={(event) =>
-                    updateIngredient(ingredient.id, { quantity: Number(event.target.value) })
-                  }
-                />
-              </label>
-              <label>
-                <span>Unit</span>
+                <span>Template recipe</span>
                 <select
-                  aria-label={`Ingredient ${index + 1} unit`}
-                  value={ingredient.unit}
-                  onChange={(event) =>
-                    updateIngredient(ingredient.id, { unit: event.target.value })
-                  }
+                  aria-label="Template recipe to import"
+                  value={selectedTemplateRecipeId}
+                  onChange={(event) => setSelectedTemplateRecipeId(event.target.value)}
                 >
-                  {unitOptionsFor(ingredient.unit).map((unit) => (
-                    <option key={unit} value={unit}>
-                      {unit}
+                  {availableTemplateRecipes.map((template) => (
+                    <option key={template.id} value={template.id}>
+                      {template.title}
                     </option>
                   ))}
                 </select>
               </label>
-              <label>
-                <span>Group</span>
-                <input
-                  aria-label={`Ingredient ${index + 1} group`}
-                  placeholder="Sauce, main, garnish"
-                  value={ingredient.group}
-                  onChange={(event) =>
-                    updateIngredient(ingredient.id, { group: event.target.value })
-                  }
-                />
-              </label>
-              <label className="full-span">
-                <span>Prep note</span>
-                <input
-                  aria-label={`Ingredient ${index + 1} prep note`}
-                  placeholder="diced, divided, optional"
-                  value={ingredient.note}
-                  onChange={(event) =>
-                    updateIngredient(ingredient.id, { note: event.target.value })
-                  }
-                />
-              </label>
-            </div>
-            <div className="collection-row__actions">
               <button
                 className="secondary-button"
                 type="button"
-                disabled={index === 0}
-                onClick={() =>
-                  updateFormValues((values) => ({
-                    ...values,
-                    ingredients: moveRow(values.ingredients, ingredient.id, -1),
-                  }))
-                }
+                onClick={() => importSelectedTemplateRecipe()}
               >
-                Move up
-              </button>
-              <button
-                className="secondary-button"
-                type="button"
-                disabled={index === formState.values.ingredients.length - 1}
-                onClick={() =>
-                  updateFormValues((values) => ({
-                    ...values,
-                    ingredients: moveRow(values.ingredients, ingredient.id, 1),
-                  }))
-                }
-              >
-                Move down
-              </button>
-              <button
-                className="secondary-button"
-                type="button"
-                onClick={() =>
-                  updateFormValues((values) => ({
-                    ...values,
-                    ingredients: duplicateIngredient(values.ingredients, ingredient.id),
-                  }))
-                }
-              >
-                Duplicate
-              </button>
-              <button
-                className="secondary-button"
-                type="button"
-                disabled={formState.values.ingredients.length === 1}
-                onClick={() =>
-                  updateFormValues((values) => ({
-                    ...values,
-                    ingredients: removeRow(values.ingredients, ingredient.id, createIngredientRow),
-                  }))
-                }
-              >
-                Remove
+                Import template recipe
               </button>
             </div>
-          </fieldset>
-        ))}
-      </section>
+          ) : null}
+
+          {templateImportState.status === "ready" &&
+          templateImportState.templates.length > 0 &&
+          availableTemplateRecipes.length === 0 ? (
+            <p className="note-block">All available template recipes are already imported.</p>
+          ) : null}
+
+          {formState.values.importedTemplates.length > 0 ? (
+            <ul className="compact-list" aria-label="Imported template recipes">
+              {formState.values.importedTemplates.map((template) => (
+                <li key={template.id}>
+                  <span>
+                    <strong>{template.title}</strong>{" "}
+                    <span className="muted-text">
+                      imported as an independent copy
+                      {template.nutrition ? ` · ${nutritionSummaryText(template.nutrition)}` : ""}
+                    </span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+
+          {templateImportState.status === "ready" && templateImportState.message ? (
+            <p className="note-block" role="status">
+              {templateImportState.message}
+            </p>
+          ) : null}
+
+          {templateImportState.status === "ready" && templateImportState.error ? (
+            <ErrorView title="Template import failed" message={templateImportState.error} />
+          ) : null}
+        </section>
+      ) : null}
 
       <section className="collection-editor" aria-labelledby="steps-form-title">
         <div className="collection-editor__header">
@@ -600,71 +951,28 @@ export function RecipeFormScreen({
           </button>
         </div>
 
-        {formState.values.steps.map((step, index) => (
-          <fieldset className="collection-row" key={step.id}>
-            <legend>Step {index + 1}</legend>
-            <label>
-              <span>Instruction</span>
-              <textarea
-                aria-label={`Step ${index + 1} text`}
-                value={step.text}
-                onChange={(event) => updateStep(step.id, { text: event.target.value })}
-              />
-            </label>
-            <div className="collection-row__actions">
-              <button
-                className="secondary-button"
-                type="button"
-                disabled={index === 0}
-                onClick={() =>
-                  updateFormValues((values) => ({
-                    ...values,
-                    steps: moveRow(values.steps, step.id, -1),
-                  }))
-                }
-              >
-                Move up
-              </button>
-              <button
-                className="secondary-button"
-                type="button"
-                disabled={index === formState.values.steps.length - 1}
-                onClick={() =>
-                  updateFormValues((values) => ({
-                    ...values,
-                    steps: moveRow(values.steps, step.id, 1),
-                  }))
-                }
-              >
-                Move down
-              </button>
-              <button
-                className="secondary-button"
-                type="button"
-                onClick={() =>
-                  updateFormValues((values) => ({
-                    ...values,
-                    steps: duplicateStep(values.steps, step.id),
-                  }))
-                }
-              >
-                Duplicate
-              </button>
-              <button
-                className="secondary-button"
-                type="button"
-                disabled={formState.values.steps.length === 1}
-                onClick={() =>
-                  updateFormValues((values) => ({
-                    ...values,
-                    steps: removeRow(values.steps, step.id, createStepRow),
-                  }))
-                }
-              >
-                Remove
-              </button>
+        {manualStepRows.map((step) => renderStepRow(step))}
+        {importedStepGroups.map((group) => (
+          <details
+            className="imported-template-section"
+            key={group.template.id}
+            open={group.template.stepsExpanded}
+            onToggle={(event) =>
+              updateImportedTemplateExpansion(
+                group.template.id,
+                "stepsExpanded",
+                event.currentTarget.open,
+              )
+            }
+          >
+            <summary>
+              <span>{group.template.title} steps</span>
+              <span className="muted-text">{group.rows.length} copied rows</span>
+            </summary>
+            <div className="imported-template-section__body">
+              {group.rows.map((step) => renderStepRow(step))}
             </div>
-          </fieldset>
+          </details>
         ))}
       </section>
 
@@ -833,74 +1141,38 @@ export function RecipeFormScreen({
           User-entered warnings only. This does not guarantee a recipe is safe for an allergy or
           diet.
         </p>
-        <div className="dietary-grid">
-          {allergenOptions.map((option) => {
-            const allergen = formState.values.dietary.allergens[option.value];
+        <div className="allergen-table-wrap">
+          <table className="allergen-table">
+            <thead>
+              <tr>
+                <th scope="col">Allergen</th>
+                <th scope="col">Contains</th>
+              </tr>
+            </thead>
+            <tbody>
+              {allergenOptions.map((option) => {
+                const allergen = formState.values.dietary.allergens[option.value];
 
-            return (
-              <div className="dietary-row" key={option.value}>
-                <label className="checkbox-row">
-                  <input
-                    aria-label={`Contains ${option.label.toLowerCase()}`}
-                    checked={allergen.selected}
-                    onChange={(event) =>
-                      updateAllergen(option.value, { selected: event.target.checked })
-                    }
-                    type="checkbox"
-                  />
-                  Contains {option.label.toLowerCase()}
-                </label>
-                <label>
-                  <span>Status</span>
-                  <select
-                    aria-label={`${option.label} warning status`}
-                    disabled={!allergen.selected}
-                    value={allergen.status}
-                    onChange={(event) =>
-                      updateAllergen(option.value, {
-                        status: event.target.value as WarningVerificationStatus,
-                      })
-                    }
-                  >
-                    {warningStatusOptions.map((status) => (
-                      <option key={status.value} value={status.value}>
-                        {status.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-            );
-          })}
-        </div>
-        <div className="form-grid">
-          <label>
-            <span>Dietary tags</span>
-            <input
-              aria-label="Dietary tags"
-              placeholder="vegetarian, low sodium"
-              value={formState.values.dietary.dietaryTags}
-              onChange={(event) => updateDietary({ dietaryTags: event.target.value })}
-            />
-          </label>
-          <label>
-            <span>Dietary tag status</span>
-            <select
-              aria-label="Dietary tag warning status"
-              value={formState.values.dietary.dietaryTagStatus}
-              onChange={(event) =>
-                updateDietary({
-                  dietaryTagStatus: event.target.value as WarningVerificationStatus,
-                })
-              }
-            >
-              {warningStatusOptions.map((status) => (
-                <option key={status.value} value={status.value}>
-                  {status.label}
-                </option>
-              ))}
-            </select>
-          </label>
+                return (
+                  <tr key={option.value}>
+                    <th scope="row">{option.label}</th>
+                    <td>
+                      <input
+                        aria-label={`${option.label} allergen`}
+                        checked={allergen.status === "contains"}
+                        type="checkbox"
+                        onChange={(event) =>
+                          updateAllergen(option.value, {
+                            status: event.target.checked ? "contains" : "unverified",
+                          })
+                        }
+                      />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       </section>
 
@@ -912,8 +1184,27 @@ export function RecipeFormScreen({
           </div>
         </div>
         <p className="muted-text">
-          Optional estimates for the whole recipe. These are not clinical recommendations.
+          Optional manual estimates for the whole recipe. These are not clinical recommendations.
         </p>
+        {formState.values.importedTemplates.length > 0 ? (
+          <div className="template-nutrition-panel" aria-label="Template nutrition subtotal">
+            <h4>Template nutrition</h4>
+            <ul className="compact-list">
+              {formState.values.importedTemplates.map((template) => (
+                <li key={template.id}>
+                  <span>
+                    <strong>{template.title}</strong>{" "}
+                    <span className="muted-text">
+                      {template.nutrition
+                        ? nutritionSummaryText(template.nutrition)
+                        : "No manual nutrition on this template."}
+                    </span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
         <div className="nutrition-grid">
           {nutritionMetricDefinitions.map((definition) => {
             const nutrition = formState.values.nutrition[definition.metric];
@@ -935,38 +1226,52 @@ export function RecipeFormScreen({
                       }
                     />
                   </label>
-                  <label>
-                    <span>Status</span>
-                    <select
-                      aria-label={`${definition.label} nutrition status`}
-                      value={nutrition.status}
-                      onChange={(event) =>
-                        updateNutrition(definition.metric, {
-                          status: event.target.value as NutritionStatus,
-                        })
-                      }
-                    >
-                      {nutritionStatusOptions.map((status) => (
-                        <option key={status.value} value={status.value}>
-                          {status.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="full-span">
-                    <span>Source</span>
-                    <input
-                      aria-label={`${definition.label} nutrition source`}
-                      value={nutrition.source}
-                      onChange={(event) =>
-                        updateNutrition(definition.metric, { source: event.target.value })
-                      }
-                    />
-                  </label>
                 </div>
               </fieldset>
             );
           })}
+        </div>
+        <div className="nutrition-summary-wrap">
+          <table className="nutrition-summary-table" aria-label="Nutrition totals">
+            <thead>
+              <tr>
+                <th scope="col">Metric</th>
+                <th scope="col">From templates</th>
+                <th scope="col">Added now</th>
+                <th scope="col">Total</th>
+                <th scope="col">Per serving</th>
+              </tr>
+            </thead>
+            <tbody>
+              {nutritionMetricDefinitions.map((definition) => {
+                const templateAmount = templateNutritionTotals[definition.metric];
+                const manualAmount = manualNutritionTotals[definition.metric];
+                const totalAmount = totalNutrition[definition.metric];
+                const perServingAmount =
+                  formState.values.baseServings > 0
+                    ? totalAmount / formState.values.baseServings
+                    : 0;
+
+                return (
+                  <tr key={definition.metric}>
+                    <th scope="row">{definition.label}</th>
+                    <td>
+                      {formatNutritionAmount(templateAmount)} {definition.unit}
+                    </td>
+                    <td>
+                      {formatNutritionAmount(manualAmount)} {definition.unit}
+                    </td>
+                    <td>
+                      {formatNutritionAmount(totalAmount)} {definition.unit}
+                    </td>
+                    <td>
+                      {formatNutritionAmount(perServingAmount)} {definition.unit}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       </section>
 
@@ -978,6 +1283,15 @@ export function RecipeFormScreen({
             type="checkbox"
           />
           Favorite
+        </label>
+        <label className="checkbox-row">
+          <input
+            aria-label="Template recipe"
+            checked={formState.values.isTemplate}
+            onChange={(event) => updateValues({ isTemplate: event.target.checked })}
+            type="checkbox"
+          />
+          Template recipe?
         </label>
       </div>
 
@@ -1014,7 +1328,9 @@ function createEmptyValues(): RecipeFormValues {
     guidance: createEmptyGuidanceValues(),
     dietary: createEmptyDietaryValues(),
     nutrition: createEmptyNutritionValues(),
+    importedTemplates: [],
     isFavorite: false,
+    isTemplate: false,
     photoLocalId: "",
   };
 }
@@ -1027,7 +1343,7 @@ function recipeToFormValues(recipe: Recipe): RecipeFormValues {
     cookbookId: recipe.cookbookId,
     ingredients:
       recipe.ingredients.length > 0
-        ? recipe.ingredients.map(ingredientToFormRow)
+        ? recipe.ingredients.map((ingredient) => ingredientToFormRow(ingredient))
         : [createIngredientRow()],
     steps:
       recipe.steps.length > 0
@@ -1044,18 +1360,22 @@ function recipeToFormValues(recipe: Recipe): RecipeFormValues {
     guidance: guidanceToFormValues(recipe.guidance),
     dietary: dietaryToFormValues(recipe.dietary),
     nutrition: nutritionToFormValues(recipe.nutrition),
+    importedTemplates: [],
     isFavorite: recipe.isFavorite,
+    isTemplate: Boolean(recipe.isTemplate),
     photoLocalId: recipe.photo?.localId ?? "",
   };
 }
 
-function ingredientToFormRow(ingredient: Ingredient): IngredientFormRow {
+function ingredientToFormRow(ingredient: Ingredient, sourceTemplate?: Recipe): IngredientFormRow {
   return createIngredientRow({
     name: ingredient.name,
-    quantity: ingredient.quantity,
+    quantity: String(ingredient.quantity),
     unit: ingredient.unit,
     group: ingredient.group ?? "",
     note: ingredient.note ?? "",
+    sourceTemplateId: sourceTemplate?.id,
+    sourceTemplateTitle: sourceTemplate?.title,
   });
 }
 
@@ -1069,7 +1389,7 @@ function formValuesToInput(values: RecipeFormValues, recipeId?: string): RecipeI
     baseServings: values.baseServings,
     ingredients: values.ingredients.map((ingredient) => ({
       name: ingredient.name,
-      quantity: ingredient.quantity,
+      quantity: Number(ingredient.quantity),
       unit: ingredient.unit,
       note: optionalText(ingredient.note),
       group: optionalText(ingredient.group),
@@ -1090,13 +1410,31 @@ function formValuesToInput(values: RecipeFormValues, recipeId?: string): RecipeI
     notes: values.notes,
     guidance: guidanceFromFormValues(values.guidance),
     dietary: dietaryFromFormValues(values.dietary),
-    nutrition: nutritionFromFormValues(values.nutrition),
+    nutrition: nutritionFromFormValues(values.nutrition, values.importedTemplates),
     isFavorite: values.isFavorite,
+    isTemplate: values.isTemplate,
     photo:
       values.photoLocalId.trim().length > 0 ? { localId: values.photoLocalId.trim() } : undefined,
     createdAt: now,
     updatedAt: now,
   };
+}
+
+function validateRecipeFormValues(values: RecipeFormValues) {
+  const invalidIngredientIndex = values.ingredients.findIndex((ingredient) => {
+    const parsedQuantity = Number(ingredient.quantity);
+    return (
+      ingredient.quantity.trim().length === 0 ||
+      !Number.isFinite(parsedQuantity) ||
+      parsedQuantity <= 0
+    );
+  });
+
+  if (invalidIngredientIndex >= 0) {
+    return `Ingredient ${invalidIngredientIndex + 1} quantity must be greater than zero.`;
+  }
+
+  return undefined;
 }
 
 function createIngredientRow(
@@ -1105,10 +1443,12 @@ function createIngredientRow(
   return {
     id: createRowId("ingredient"),
     name: values.name ?? "",
-    quantity: values.quantity ?? 1,
+    quantity: values.quantity ?? "",
     unit: values.unit ?? "g",
     group: values.group ?? "",
     note: values.note ?? "",
+    sourceTemplateId: values.sourceTemplateId,
+    sourceTemplateTitle: values.sourceTemplateTitle,
   };
 }
 
@@ -1126,8 +1466,6 @@ function createEmptyGuidanceValues(): PracticalGuidanceFormValues {
 function createEmptyDietaryValues(): DietaryFormValues {
   return {
     allergens: createEmptyAllergenValues(),
-    dietaryTags: "",
-    dietaryTagStatus: "unverified",
   };
 }
 
@@ -1137,8 +1475,6 @@ function createEmptyNutritionValues(): NutritionFormValues {
       definition.metric,
       {
         amount: "",
-        status: "estimated",
-        source: "Manual entry",
       },
     ]),
   ) as NutritionFormValues;
@@ -1149,7 +1485,6 @@ function createEmptyAllergenValues(): Record<BigNineAllergen, AllergenFormValue>
     allergenOptions.map((option) => [
       option.value,
       {
-        selected: false,
         status: "unverified",
       },
     ]),
@@ -1184,43 +1519,36 @@ function guidanceFromFormValues(
   return Object.values(normalizedGuidance).some(Boolean) ? normalizedGuidance : undefined;
 }
 
+function isEmptyGuidanceValues(guidance: PracticalGuidanceFormValues) {
+  return Object.values(guidance).every((value) => value.trim().length === 0);
+}
+
 function dietaryToFormValues(dietary: RecipeDietaryMetadata | undefined): DietaryFormValues {
   const allergens = createEmptyAllergenValues();
 
   dietary?.allergens.forEach((flag) => {
     allergens[flag.allergen] = {
-      selected: true,
-      status: flag.status,
+      status: flag.status === "contains" ? "contains" : "unverified",
     };
   });
 
   return {
     allergens,
-    dietaryTags: dietary?.dietaryTags.map((flag) => flag.label).join(", ") ?? "",
-    dietaryTagStatus: dietary?.dietaryTags[0]?.status ?? "unverified",
   };
 }
 
 function dietaryFromFormValues(dietary: DietaryFormValues): RecipeDietaryMetadata | undefined {
   const allergens = allergenOptions
-    .filter((option) => dietary.allergens[option.value].selected)
+    .filter((option) => dietary.allergens[option.value].status === "contains")
     .map((option) => ({
       allergen: option.value,
-      status: dietary.allergens[option.value].status,
-    }));
-  const dietaryTags = dietary.dietaryTags
-    .split(",")
-    .map((tag) => tag.trim())
-    .filter(Boolean)
-    .map((label) => ({
-      label,
-      status: dietary.dietaryTagStatus,
+      status: "contains" as const,
     }));
 
-  return allergens.length > 0 || dietaryTags.length > 0
+  return allergens.length > 0
     ? {
         allergens,
-        dietaryTags,
+        dietaryTags: [],
       }
     : undefined;
 }
@@ -1239,8 +1567,6 @@ function nutritionToFormValues(
 
     values[definition.metric] = {
       amount: String(value.amount),
-      status: value.status,
-      source: value.source,
     };
   });
 
@@ -1249,25 +1575,103 @@ function nutritionToFormValues(
 
 function nutritionFromFormValues(
   nutrition: NutritionFormValues,
+  importedTemplates: ReadonlyArray<ImportedTemplateFormValue>,
 ): RecipeNutritionEstimate | undefined {
   const estimate: RecipeNutritionEstimate = {};
+  const templateTotals = nutritionTotalsFromImportedTemplates(importedTemplates);
+  const manualTotals = nutritionTotalsFromFormValues(nutrition);
+  const totalNutrition = addNutritionTotals(templateTotals, manualTotals);
 
   nutritionMetricDefinitions.forEach((definition) => {
     const value = nutrition[definition.metric];
+    const totalAmount = totalNutrition[definition.metric];
 
-    if (value.amount.trim().length === 0) {
+    if (value.amount.trim().length === 0 && templateTotals[definition.metric] === 0) {
       return;
     }
 
     estimate[definition.metric] = {
-      amount: Number(value.amount),
+      amount: totalAmount,
       unit: definition.unit,
-      status: value.status,
-      source: value.source.trim().length > 0 ? value.source.trim() : "Manual entry",
     };
   });
 
   return Object.keys(estimate).length > 0 ? estimate : undefined;
+}
+
+type NutritionTotals = Record<NutritionMetric, number>;
+
+function createEmptyNutritionTotals(): NutritionTotals {
+  return Object.fromEntries(
+    nutritionMetricDefinitions.map((definition) => [definition.metric, 0]),
+  ) as NutritionTotals;
+}
+
+function nutritionTotalsFromImportedTemplates(
+  importedTemplates: ReadonlyArray<ImportedTemplateFormValue>,
+): NutritionTotals {
+  return importedTemplates.reduce<NutritionTotals>((totals, template) => {
+    nutritionMetricDefinitions.forEach((definition) => {
+      totals[definition.metric] += template.nutrition?.[definition.metric]?.amount ?? 0;
+    });
+
+    return totals;
+  }, createEmptyNutritionTotals());
+}
+
+function nutritionTotalsFromFormValues(nutrition: NutritionFormValues): NutritionTotals {
+  const totals = createEmptyNutritionTotals();
+
+  nutritionMetricDefinitions.forEach((definition) => {
+    const amount = Number(nutrition[definition.metric].amount);
+    totals[definition.metric] = Number.isFinite(amount) && amount > 0 ? amount : 0;
+  });
+
+  return totals;
+}
+
+function addNutritionTotals(firstTotals: NutritionTotals, secondTotals: NutritionTotals) {
+  return Object.fromEntries(
+    nutritionMetricDefinitions.map((definition) => [
+      definition.metric,
+      firstTotals[definition.metric] + secondTotals[definition.metric],
+    ]),
+  ) as NutritionTotals;
+}
+
+function nutritionSummaryText(nutrition: RecipeNutritionEstimate) {
+  const summary = nutritionMetricDefinitions
+    .flatMap((definition) => {
+      const value = nutrition[definition.metric];
+
+      return value
+        ? [`${definition.label} ${formatNutritionAmount(value.amount)} ${definition.unit}`]
+        : [];
+    })
+    .join(", ");
+
+  return summary || "No manual nutrition on this template.";
+}
+
+function mergeTemplateAllergens(
+  dietary: DietaryFormValues,
+  templateDietary: RecipeDietaryMetadata | undefined,
+): DietaryFormValues {
+  if (!templateDietary) {
+    return dietary;
+  }
+
+  const allergens = { ...dietary.allergens };
+
+  templateDietary.allergens.forEach((flag) => {
+    if (flag.status === "contains") {
+      allergens[flag.allergen] = { status: "contains" };
+    }
+  });
+
+  return {
+    allergens,
+  };
 }
 
 function selectedCategoryOptionValue(
@@ -1297,10 +1701,15 @@ function isSameCategoryPath(firstPath: ReadonlyArray<string>, secondPath: Readon
   );
 }
 
-function createStepRow(values: Partial<Omit<StepFormRow, "id">> = {}): StepFormRow {
+function createStepRow(
+  values: Partial<Omit<StepFormRow, "id">> = {},
+  sourceTemplate?: Recipe,
+): StepFormRow {
   return {
     id: createRowId("step"),
     text: values.text ?? "",
+    sourceTemplateId: values.sourceTemplateId ?? sourceTemplate?.id,
+    sourceTemplateTitle: values.sourceTemplateTitle ?? sourceTemplate?.title,
   };
 }
 
@@ -1335,6 +1744,20 @@ function duplicateIngredient(rows: IngredientFormRow[], rowId: string): Ingredie
 
 function duplicateStep(rows: StepFormRow[], rowId: string): StepFormRow[] {
   return rows.flatMap((step) => (step.id === rowId ? [step, createStepRow(step)] : [step]));
+}
+
+function isBlankIngredientPlaceholder(rows: ReadonlyArray<IngredientFormRow>) {
+  return (
+    rows.length === 1 &&
+    rows[0].name.trim().length === 0 &&
+    rows[0].quantity.trim().length === 0 &&
+    rows[0].group.trim().length === 0 &&
+    rows[0].note.trim().length === 0
+  );
+}
+
+function isBlankStepPlaceholder(rows: ReadonlyArray<StepFormRow>) {
+  return rows.length === 1 && rows[0].text.trim().length === 0;
 }
 
 function removeRow<TRow extends { id: string }>(
