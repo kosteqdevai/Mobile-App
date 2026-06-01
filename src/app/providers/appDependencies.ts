@@ -35,6 +35,10 @@ import {
   type RecipeUseCases,
 } from "../../features/recipes/application/recipeUseCases";
 import {
+  createRecipePackUseCases,
+  type RecipePackUseCases,
+} from "../../features/recipes/application/recipePackUseCases";
+import {
   createCookSessionUseCases,
   type CookSessionStore,
   type CookSessionUseCases,
@@ -61,6 +65,7 @@ export type AppDependencies = {
   appConfig: typeof appConfig;
   recipeUseCases: RecipeUseCases;
   recipeExportUseCases: RecipeExportUseCases;
+  recipePackUseCases: RecipePackUseCases;
   cookSessionUseCases: CookSessionUseCases;
   cookbookUseCases: CookbookUseCases;
   mealPlanUseCases: MealPlanUseCases;
@@ -194,6 +199,7 @@ function createAppDependencies(
     appConfig,
     recipeUseCases,
     recipeExportUseCases: createRecipeExportUseCases(recipeUseCases, recipeSharePort),
+    recipePackUseCases: createRecipePackUseCases(recipeUseCases),
     cookSessionUseCases: createCookSessionUseCases(cookSessionStore),
     cookbookUseCases: createCookbookUseCases(cookbookRepository),
     mealPlanUseCases: createMealPlanUseCases(mealPlanRepository, recipeRepository),

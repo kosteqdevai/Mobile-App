@@ -23,6 +23,7 @@ Planning docs:
 
 - [MVP scope](docs/mvp-scope.md)
 - [Data strategy](docs/data-strategy.md)
+- [Import and export](docs/import-export.md)
 - [Privacy boundaries](docs/privacy.md)
 - [Architecture contract](docs/architecture.md)
 - [Portion scaling](docs/portion-scaling.md)

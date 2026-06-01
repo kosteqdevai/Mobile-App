@@ -781,3 +781,29 @@ tests: Component tests for multi-template import, allergen merge, nutrition tota
 closes_when: A user can import more than one template, see what nutrition came from templates versus additions, and edit imported rows without the form becoming one long always-expanded block.
 escalate_if: Template imports must remain linked to source recipes, calculate nutrition automatically, or make allergy-safety claims.
 do_not: Do not add backend sync, automatic nutrition/unit conversion, medical claims, nested template logic, or marketplace behavior.
+
+## GAP-061 — Add private recipe pack import/export
+phase: 4
+status: closed
+type: data
+blocked_by: GAP-046, GAP-060
+goal: Let users move and bulk-create private recipes with a LaCucina JSON recipe pack.
+scope: Recipe import/export application use cases, backup/import UI, docs/import-export.md, routing/tests.
+acceptance_criteria: Users can export all recipes to a downloadable LaCucina Recipe Pack JSON file; users can paste or select a pack, preview valid and invalid recipes before saving, import valid recipes as new copies without overwriting existing records, and copy an AI prompt/template for bulk recipe generation.
+tests: Unit tests for pack export, parse/validation, and copy-import behavior; component tests for export, preview, import success, and invalid JSON states; route/integration coverage that imported recipes appear in the recipe list.
+closes_when: A recipe pack exported from one local store can be imported into another local store through tested UI without backend sync or account data.
+escalate_if: Import must include photos, binary media, encryption, account sync, public publishing, spreadsheet parsing, or overwrite/merge semantics.
+do_not: Do not add cloud sync, backend accounts, CSV/XLSX parsing, public links, marketplace behavior, or automatic nutrition/unit conversion.
+
+## GAP-062 — Harden recipe pack import tolerance and flow state
+phase: 4
+status: closed
+type: ui
+blocked_by: GAP-061
+goal: Make AI-generated recipe pack imports more forgiving and keep backup tab progress stable while users navigate.
+scope: Recipe pack parser, Backup screen UX, app routing state, import/export tests, docs/import-export.md.
+acceptance_criteria: To-taste ingredients with zero or missing quantity/unit import with safe to-taste defaults and visible cleanup notes; string dietary tags are accepted; Preview import is the primary first action and Import valid recipes appears only after a successful preview; Backup sub-tab state persists when switching sections and top-level navigation tabs.
+tests: Unit tests for to-taste normalization and string dietary tags; component tests for cleanup notes and tab state preservation; route test for persisted Backup preview state; manual check against lacucina_recipe_pack_simple.json.
+closes_when: The provided AI-generated recipe pack previews without ingredient quantity/unit failures and the Backup UI no longer resets preview status when navigating away and back.
+escalate_if: Import must guess arbitrary missing quantities, perform automatic unit conversion, merge/overwrite existing recipes, or import binary media.
+do_not: Do not add CSV/XLSX parsing, backend sync, public sharing, automatic nutrition calculation, or allergy-safety claims.

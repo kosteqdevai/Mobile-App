@@ -4,4 +4,5 @@ export type AppRoute =
   | { name: "recipe-create" }
   | { name: "recipe-edit"; recipeId: string }
   | { name: "cookbooks" }
+  | { name: "backup" }
   | { name: "planner" };

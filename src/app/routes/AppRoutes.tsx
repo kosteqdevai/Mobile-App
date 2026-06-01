@@ -5,6 +5,8 @@ import { PlannerScreen } from "../../features/planner/presentation/PlannerScreen
 import { RecipeDetailScreen } from "../../features/recipes/presentation/RecipeDetailScreen";
 import { RecipeFormScreen } from "../../features/recipes/presentation/RecipeFormScreen";
 import { RecipeListScreen } from "../../features/recipes/presentation/RecipeListScreen";
+import { RecipeTransferScreen } from "../../features/recipes/presentation/RecipeTransferScreen";
+import { initialRecipeTransferScreenState } from "../../features/recipes/presentation/RecipeTransferState";
 import type { AppRoute } from "./routes";
 
 export function AppRoutes() {
@@ -14,10 +16,12 @@ export function AppRoutes() {
     cookbookUseCases,
     mealPlanUseCases,
     recipeExportUseCases,
+    recipePackUseCases,
     recipeUseCases,
   } = useAppDependencies();
   const [route, setRoute] = useState<AppRoute>({ name: "recipes" });
   const [revision, setRevision] = useState(0);
+  const [recipeTransferState, setRecipeTransferState] = useState(initialRecipeTransferScreenState);
 
   function markChanged() {
     setRevision((current) => current + 1);
@@ -37,6 +41,9 @@ export function AppRoutes() {
           </button>
           <button type="button" onClick={() => setRoute({ name: "cookbooks" })}>
             Cookbooks
+          </button>
+          <button type="button" onClick={() => setRoute({ name: "backup" })}>
+            Backup
           </button>
           <button type="button" onClick={() => setRoute({ name: "planner" })}>
             Planner
@@ -110,6 +117,15 @@ export function AppRoutes() {
             mealPlanUseCases={mealPlanUseCases}
             recipeUseCases={recipeUseCases}
             onChanged={markChanged}
+          />
+        ) : null}
+
+        {route.name === "backup" ? (
+          <RecipeTransferScreen
+            recipePackUseCases={recipePackUseCases}
+            transferState={recipeTransferState}
+            onImported={markChanged}
+            onTransferStateChange={setRecipeTransferState}
           />
         ) : null}
       </section>

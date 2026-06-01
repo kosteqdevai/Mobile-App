@@ -108,7 +108,7 @@ label {
 
 .app-nav {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -611,7 +611,7 @@ h3 {
   }
 
   .app-nav {
-    width: 340px;
+    width: 460px;
   }
 
   .filter-bar,

@@ -61,12 +61,15 @@ The next-build feedback plan lives in [docs/implementation-feedback-plan.md](doc
 
 The consolidated product ideas in `LaCucina_skonsolidowane_pomysly.md` refine the next local-first build with template recipes, simpler allergen and macro entry, a mobile-friendly quantity field, and a wider US/practical ingredient unit list. These ideas remain private, local-only, and non-clinical: Base Recipes are normal cookbook recipes marked as templates and import as independent copies, allergen fields are user-entered checkboxes where checked means contains, macro fields are manual B/T/W plus optional calories, and US units are selectable labels without automatic conversion.
 
+Private recipe backup and bulk creation use a LaCucina Recipe Pack JSON file. The UI presents this as backup/import rather than asking casual users to edit JSON; AI-assisted users can copy a template prompt and import the generated pack after preview.
+
 ## MVP implementation contract
 
 Detailed MVP contracts:
 
 - [MVP scope](docs/mvp-scope.md)
 - [Data strategy](docs/data-strategy.md)
+- [Import and export](docs/import-export.md)
 - [Privacy boundaries](docs/privacy.md)
 - [Architecture contract](docs/architecture.md)
 

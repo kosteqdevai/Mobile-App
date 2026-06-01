@@ -21,6 +21,7 @@ Current product boundaries:
 - No public recipe publishing.
 - No marketplace, subscriptions, creator profiles, calories, macros, social feed, or Freak Mode.
 - Sharing is limited to text export/native share or clipboard fallback.
+- Recipe transfer is handled through private LaCucina Recipe Pack JSON import/export with preview before saving.
 
 ## Implemented User Flows
 
@@ -42,6 +43,9 @@ Users can:
 - change target servings and see scaled ingredients;
 - distinguish scaled quantity from original/base quantity;
 - export/share a private text version of a recipe.
+- export all recipes to a private LaCucina Recipe Pack JSON backup;
+- paste or select a recipe pack, preview valid/invalid recipes, and import valid recipes as new private copies;
+- copy an AI prompt/template for bulk recipe pack generation.
 
 Current recipe form supports dynamic ingredient and step collections. The domain model stores these as arrays.
 

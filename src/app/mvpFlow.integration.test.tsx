@@ -182,4 +182,46 @@ describe("MVP flow integration", () => {
       screen.getByText(/450 kcal for 2 servings \/ 225 kcal per serving/i),
     ).toBeInTheDocument();
   });
+
+  it("imports a private recipe pack and shows imported recipes in the cookbook", async () => {
+    const storage = new MemoryKeyValueStore();
+    const database = new MemoryLocalDatabase();
+    renderPersistedApp(storage, database);
+
+    expect(await screen.findByRole("heading", { name: "Recipes" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Backup" }));
+    expect(await screen.findByRole("heading", { name: "Backup" })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Recipe pack JSON"), {
+      target: {
+        value: JSON.stringify({
+          format: "lacucina.recipe-pack",
+          version: 1,
+          recipes: [
+            {
+              title: "Imported chili",
+              baseServings: 4,
+              ingredients: [{ name: "Beans", quantity: 2, unit: "can" }],
+              steps: ["Simmer beans with spices."],
+              tags: ["batch"],
+              isTemplate: true,
+            },
+          ],
+        }),
+      },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Preview import" }));
+
+    expect(await screen.findByText("1 valid, 0 invalid, 1 total.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Import valid recipes" }));
+    expect(await screen.findByText(/Imported 1 recipes/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Recipes" }));
+    fireEvent.change(await screen.findByLabelText("Search recipes"), {
+      target: { value: "chili" },
+    });
+
+    expect(await screen.findByRole("button", { name: /Imported chili/i })).toBeInTheDocument();
+    expect(screen.getByText("Template recipe")).toBeInTheDocument();
+  });
 });

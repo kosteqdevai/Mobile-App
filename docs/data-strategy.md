@@ -39,6 +39,8 @@ Deleting a recipe removes the recipe record and its app-managed local photo refe
 
 The MVP does not promise account-based recovery, cloud backup, or cross-device restore.
 
+Manual transfer between devices is supported through LaCucina Recipe Pack export/import. The pack is a private JSON backup for recipes only; imports create new local copies and do not overwrite existing records.
+
 ## Migration Baseline
 
 Schema version `1` used active `localStorage` JSON collections:
