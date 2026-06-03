@@ -49,6 +49,14 @@ describe("CookbookManagerScreen", () => {
     );
 
     expect(await screen.findByRole("heading", { name: "Cookbooks" })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("New cookbook name"), {
+      target: { value: "Meal prep" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create cookbook" }));
+
+    expect(await screen.findByRole("option", { name: "Meal prep" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "General" })).toBeInTheDocument();
+
     fireEvent.change(screen.getByLabelText("Recipe to assign"), {
       target: { value: "recipe-1" },
     });

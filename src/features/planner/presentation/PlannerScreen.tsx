@@ -2,27 +2,27 @@ import { useEffect, useMemo, useState } from "react";
 
 import { EmptyView, ErrorView, LoadingView } from "../../../core/presentation/StateViews";
 import type { RecipeUseCases } from "../../recipes/application/recipeUseCases";
-import { formatNutritionAmount, getPlannedNutritionSummary } from "../../recipes/domain/nutrition";
+import { formatNutritionAmount } from "../../recipes/domain/nutrition";
 import type { Recipe } from "../../recipes/domain/recipe";
 import type { MealPlanUseCases } from "../application/mealPlanUseCases";
 import {
-  DEFAULT_PLANNER_SLOT_TEMPLATES,
+  resolveMealPlanCalendarDay,
+  resolveMealPlanCalendarRange,
   type MealPlan,
+  type MealPlanCalendarDaySummary,
+  type MealPlanDayDefinition,
+  type MealPlanScheduleMode,
   type PlannedMealEntryContext,
-  type PlannerBoard,
-  type PlannerBoardEntry,
-  type PlannerBoardPreset,
-  type PlannerDayBucket,
-  type PlannerSlotTemplate,
+  type PlannerNutritionMetric,
+  type PlannerNutritionTargets,
 } from "../domain/mealPlan";
 
 type PlannerScreenProps = {
   mealPlanUseCases: MealPlanUseCases;
   recipeUseCases: RecipeUseCases;
   onChanged: () => void;
+  onOpenRecipe?: (recipeId: string, servings: number, openCookMode: boolean) => void;
 };
-
-type PlannerMode = "board" | "templates";
 
 type PlannerState =
   | { status: "loading" }
@@ -35,45 +35,50 @@ type PlannerState =
       error?: string;
     };
 
-type BoardConfigurationDraft = {
-  preset: PlannerBoardPreset;
+type CalendarView = "week" | "month";
+
+type SetupDraft = {
+  mode: MealPlanScheduleMode;
   startDate: string;
-  slotLabels: string;
-  customDayLabels: string;
+  dayLabels: string;
+  individualDates: string;
 };
 
-type BoardEntryDraft = {
+type EntryDraft = {
   recipeId: string;
   servings: number;
-  slotId: string;
-  customSlotLabel: string;
+  slotLabel: string;
   context: PlannedMealEntryContext;
 };
 
-type BoardMoveDraft = {
-  targetDayId: string;
-  targetSlotId: string;
-  targetCustomSlotLabel: string;
-};
+type TargetDraft = Record<PlannerNutritionMetric, string>;
 
-const noSlotValue = "__no-slot";
-const customSlotValue = "__custom-slot";
+const nutritionMetrics: ReadonlyArray<{
+  metric: PlannerNutritionMetric;
+  label: string;
+  unit: string;
+}> = [
+  { metric: "calories", label: "Calories", unit: "kcal" },
+  { metric: "protein", label: "Protein", unit: "g" },
+  { metric: "fat", label: "Fat", unit: "g" },
+  { metric: "carbs", label: "Carbs", unit: "g" },
+];
 
-export function PlannerScreen({ mealPlanUseCases, recipeUseCases, onChanged }: PlannerScreenProps) {
+export function PlannerScreen({
+  mealPlanUseCases,
+  recipeUseCases,
+  onChanged,
+  onOpenRecipe,
+}: PlannerScreenProps) {
   const [plannerState, setPlannerState] = useState<PlannerState>({ status: "loading" });
-  const [mode, setMode] = useState<PlannerMode>("board");
-  const [dayLabel, setDayLabel] = useState("");
-  const [boardDraftOverride, setBoardDraftOverride] = useState<
-    { key: string; draft: BoardConfigurationDraft } | undefined
-  >();
-  const [boardEntryDrafts, setBoardEntryDrafts] = useState<Record<string, BoardEntryDraft>>({});
-  const [boardServingDrafts, setBoardServingDrafts] = useState<Record<string, number>>({});
-  const [boardMoveDrafts, setBoardMoveDrafts] = useState<Record<string, BoardMoveDraft>>({});
-  const [templateEntryDrafts, setTemplateEntryDrafts] = useState<
-    Record<string, { recipeId: string; servings: number }>
-  >({});
-  const [templateServingDrafts, setTemplateServingDrafts] = useState<Record<string, number>>({});
-  const [templateMoveDrafts, setTemplateMoveDrafts] = useState<Record<string, string>>({});
+  const [setupOpen, setSetupOpen] = useState(false);
+  const [calendarView, setCalendarView] = useState<CalendarView>("week");
+  const [selectedDate, setSelectedDate] = useState("");
+  const [setupDraftOverride, setSetupDraftOverride] = useState<SetupDraft | undefined>();
+  const [entryDrafts, setEntryDrafts] = useState<Record<string, EntryDraft>>({});
+  const [targetDrafts, setTargetDrafts] = useState<Record<string, TargetDraft>>({});
+  const [scheduleServingDrafts, setScheduleServingDrafts] = useState<Record<string, number>>({});
+  const [dateServingDrafts, setDateServingDrafts] = useState<Record<string, number>>({});
 
   useEffect(() => {
     void loadPlanner();
@@ -88,24 +93,62 @@ export function PlannerScreen({ mealPlanUseCases, recipeUseCases, onChanged }: P
     return plannerState.plans.find((plan) => plan.id === plannerState.selectedPlanId);
   }, [plannerState]);
 
-  const selectedBoard = selectedPlan?.board;
-  const boardDraftKey = selectedPlan ? boardConfigurationDraftKey(selectedPlan) : "planner-empty";
-  const boardDraft = useMemo(() => {
-    if (boardDraftOverride?.key === boardDraftKey) {
-      return boardDraftOverride.draft;
+  const activeDate = selectedDate || (selectedPlan ? anchorDateForPlan(selectedPlan) : "");
+  const rangeStart = activeDate ? calendarRangeStart(activeDate, calendarView) : "";
+  const calendarDays = useMemo(() => {
+    if (!selectedPlan || plannerState.status !== "ready" || !rangeStart) {
+      return [];
     }
 
-    return selectedBoard
-      ? boardConfigurationDraftFromBoard(selectedBoard)
-      : defaultBoardConfigurationDraft();
-  }, [boardDraftKey, boardDraftOverride, selectedBoard]);
+    return resolveMealPlanCalendarRange(
+      selectedPlan,
+      plannerState.recipes,
+      rangeStart,
+      calendarView === "week" ? 7 : daysInMonth(rangeStart),
+    );
+  }, [calendarView, plannerState, rangeStart, selectedPlan]);
+  const selectedDay = useMemo(() => {
+    if (!selectedPlan || plannerState.status !== "ready" || !activeDate) {
+      return undefined;
+    }
 
-  function setBoardDraft(draft: BoardConfigurationDraft) {
-    setBoardDraftOverride({ key: boardDraftKey, draft });
-  }
+    return resolveMealPlanCalendarDay(selectedPlan, plannerState.recipes, activeDate);
+  }, [activeDate, plannerState, selectedPlan]);
+  const setupDraft =
+    setupDraftOverride ?? (selectedPlan ? setupDraftFromPlan(selectedPlan) : defaultSetupDraft());
 
   async function loadPlanner() {
     setPlannerState({ status: "loading" });
+    const [plansResult, recipesResult] = await Promise.all([
+      mealPlanUseCases.listPlans(),
+      recipeUseCases.listRecipes(),
+    ]);
+
+    if (!plansResult.ok) {
+      setPlannerState({ status: "error", message: plansResult.error.message });
+      return;
+    }
+
+    if (!recipesResult.ok) {
+      setPlannerState({ status: "error", message: recipesResult.error.message });
+      return;
+    }
+
+    const firstPlanId = plansResult.value[0]?.id ?? "";
+    setSelectedDate((current) => current || anchorDateForPlan(plansResult.value[0]));
+    setPlannerState({
+      status: "ready",
+      plans: plansResult.value,
+      recipes: recipesResult.value,
+      selectedPlanId: firstPlanId,
+    });
+  }
+
+  async function refreshPlanner(nextError?: string) {
+    if (plannerState.status !== "ready") {
+      return;
+    }
+
     const [plansResult, recipesResult] = await Promise.all([
       mealPlanUseCases.listPlans(),
       recipeUseCases.listRecipes(),
@@ -125,213 +168,163 @@ export function PlannerScreen({ mealPlanUseCases, recipeUseCases, onChanged }: P
       status: "ready",
       plans: plansResult.value,
       recipes: recipesResult.value,
-      selectedPlanId: plansResult.value[0]?.id ?? "",
+      selectedPlanId:
+        plansResult.value.find((plan) => plan.id === plannerState.selectedPlanId)?.id ??
+        plansResult.value[0]?.id ??
+        "",
+      error: nextError,
     });
   }
 
-  async function configureBoard() {
+  function showActionError(message: string) {
+    if (plannerState.status === "ready") {
+      setPlannerState({ ...plannerState, error: message });
+    }
+  }
+
+  async function applySetup() {
     if (plannerState.status !== "ready" || !selectedPlan) {
       return;
     }
 
-    const result = await mealPlanUseCases.configureBoard(selectedPlan.id, {
-      preset: boardDraft.preset,
-      startDate: boardDraft.startDate || undefined,
-      customDayLabels: labelsFromText(boardDraft.customDayLabels),
-      slotTemplates: slotTemplatesFromText(boardDraft.slotLabels),
+    const result = await mealPlanUseCases.configureSchedule(selectedPlan.id, {
+      mode: setupDraft.mode,
+      startDate: setupDraft.startDate || undefined,
+      dayLabels: labelsFromText(setupDraft.dayLabels),
+      individualDates: labelsFromText(setupDraft.individualDates),
     });
 
     if (!result.ok) {
-      setPlannerState({ ...plannerState, error: result.error.message });
+      showActionError(result.error.message);
+      return;
+    }
+
+    setSetupDraftOverride(undefined);
+    setSelectedDate(anchorDateForPlan(result.value));
+    onChanged();
+    await refreshPlanner();
+  }
+
+  async function saveTargets(dayId: string) {
+    if (plannerState.status !== "ready" || !selectedPlan) {
+      return;
+    }
+
+    const result = await mealPlanUseCases.updateScheduleDayTargets(
+      selectedPlan.id,
+      dayId,
+      targetsFromDraft(targetDrafts[dayId]),
+    );
+
+    if (!result.ok) {
+      showActionError(result.error.message);
       return;
     }
 
     onChanged();
-    await loadPlanner();
+    await refreshPlanner();
   }
 
-  async function addBoardEntry(dayId: string) {
+  async function addScheduleEntry(dayId: string) {
     if (plannerState.status !== "ready" || !selectedPlan) {
       return;
     }
 
-    const draft = boardEntryDrafts[dayId] ?? defaultBoardEntryDraft();
-    const result = await mealPlanUseCases.addBoardEntry(selectedPlan.id, dayId, {
-      id: `board-entry-${Date.now()}`,
+    const draft = entryDrafts[dayId] ?? defaultEntryDraft();
+    const result = await mealPlanUseCases.addScheduleEntry(selectedPlan.id, dayId, {
+      id: `schedule-entry-${Date.now()}`,
       recipeId: draft.recipeId,
       servings: draft.servings,
+      slotLabel: draft.slotLabel || undefined,
       context: draft.context,
-      ...slotPayload(draft.slotId, draft.customSlotLabel),
     });
 
     if (!result.ok) {
-      setPlannerState({ ...plannerState, error: result.error.message });
+      showActionError(result.error.message);
       return;
     }
 
-    setBoardEntryDrafts({ ...boardEntryDrafts, [dayId]: defaultBoardEntryDraft() });
+    setEntryDrafts({ ...entryDrafts, [dayId]: defaultEntryDraft() });
     onChanged();
-    await loadPlanner();
+    await refreshPlanner();
   }
 
-  async function changeBoardServings(entryId: string) {
+  async function updateScheduleEntryServings(entryId: string) {
     if (plannerState.status !== "ready" || !selectedPlan) {
       return;
     }
 
-    const result = await mealPlanUseCases.changeBoardEntryServings(
+    const result = await mealPlanUseCases.changeScheduleEntryServings(
       selectedPlan.id,
       entryId,
-      boardServingDrafts[entryId] ?? 1,
+      scheduleServingDrafts[entryId] ?? 1,
     );
 
     if (!result.ok) {
-      setPlannerState({ ...plannerState, error: result.error.message });
+      showActionError(result.error.message);
       return;
     }
 
     onChanged();
-    await loadPlanner();
+    await refreshPlanner();
   }
 
-  async function moveBoardEntry(entry: PlannerBoardEntry) {
+  async function removeScheduleEntry(entryId: string) {
     if (plannerState.status !== "ready" || !selectedPlan) {
       return;
     }
 
-    const draft = boardMoveDrafts[entry.id];
-    const result = await mealPlanUseCases.moveBoardEntry(selectedPlan.id, entry.id, {
-      targetDayId: draft?.targetDayId || selectedPlan.board?.days[0]?.id || "",
-      targetSlotId:
-        draft?.targetSlotId === customSlotValue
-          ? undefined
-          : slotIdOrUndefined(draft?.targetSlotId),
-      targetCustomSlotLabel:
-        draft?.targetSlotId === customSlotValue ? draft.targetCustomSlotLabel : undefined,
-    });
+    const result = await mealPlanUseCases.removeScheduleEntry(selectedPlan.id, entryId);
 
     if (!result.ok) {
-      setPlannerState({ ...plannerState, error: result.error.message });
+      showActionError(result.error.message);
       return;
     }
 
     onChanged();
-    await loadPlanner();
+    await refreshPlanner();
   }
 
-  async function removeBoardEntry(entryId: string) {
-    if (plannerState.status !== "ready" || !selectedPlan) {
+  async function setEntryEaten(entryId: string, eaten: boolean) {
+    if (plannerState.status !== "ready" || !selectedPlan || !selectedDay) {
       return;
     }
 
-    const result = await mealPlanUseCases.removeBoardEntry(selectedPlan.id, entryId);
-
-    if (!result.ok) {
-      setPlannerState({ ...plannerState, error: result.error.message });
-      return;
-    }
-
-    onChanged();
-    await loadPlanner();
-  }
-
-  async function addDay() {
-    if (plannerState.status !== "ready" || !selectedPlan) {
-      return;
-    }
-
-    const result = await mealPlanUseCases.addDay(selectedPlan.id, {
-      id: `day-${Date.now()}`,
-      label: dayLabel,
-      preset: "custom",
-    });
-
-    if (!result.ok) {
-      setPlannerState({ ...plannerState, error: result.error.message });
-      return;
-    }
-
-    setDayLabel("");
-    onChanged();
-    await loadPlanner();
-  }
-
-  async function addRecipeToTemplateDay(dayId: string) {
-    if (plannerState.status !== "ready" || !selectedPlan) {
-      return;
-    }
-
-    const draft = templateEntryDrafts[dayId] ?? { recipeId: "", servings: 1 };
-    const result = await mealPlanUseCases.addSavedRecipeToDay(selectedPlan.id, dayId, {
-      id: `entry-${Date.now()}`,
-      recipeId: draft.recipeId,
-      servings: draft.servings,
-    });
-
-    if (!result.ok) {
-      setPlannerState({ ...plannerState, error: result.error.message });
-      return;
-    }
-
-    setTemplateEntryDrafts({ ...templateEntryDrafts, [dayId]: { recipeId: "", servings: 1 } });
-    onChanged();
-    await loadPlanner();
-  }
-
-  async function changeTemplateServings(entryId: string) {
-    if (plannerState.status !== "ready" || !selectedPlan) {
-      return;
-    }
-
-    const result = await mealPlanUseCases.changeServings(
+    const result = await mealPlanUseCases.setDateEntryEaten(
       selectedPlan.id,
+      selectedDay.date,
       entryId,
-      templateServingDrafts[entryId] ?? 1,
+      eaten,
     );
 
     if (!result.ok) {
-      setPlannerState({ ...plannerState, error: result.error.message });
+      showActionError(result.error.message);
       return;
     }
 
     onChanged();
-    await loadPlanner();
+    await refreshPlanner();
   }
 
-  async function moveTemplateEntry(entryId: string) {
-    if (plannerState.status !== "ready" || !selectedPlan) {
+  async function saveDateServings(entryId: string) {
+    if (plannerState.status !== "ready" || !selectedPlan || !selectedDay) {
       return;
     }
 
-    const result = await mealPlanUseCases.moveEntry(
+    const result = await mealPlanUseCases.setDateEntryServings(
       selectedPlan.id,
+      selectedDay.date,
       entryId,
-      templateMoveDrafts[entryId] || selectedPlan.loopDays[0]?.id || "",
+      dateServingDrafts[entryId] ?? 1,
     );
 
     if (!result.ok) {
-      setPlannerState({ ...plannerState, error: result.error.message });
+      showActionError(result.error.message);
       return;
     }
 
     onChanged();
-    await loadPlanner();
-  }
-
-  async function removeTemplateEntry(entryId: string) {
-    if (plannerState.status !== "ready" || !selectedPlan) {
-      return;
-    }
-
-    const result = await mealPlanUseCases.removeEntry(selectedPlan.id, entryId);
-
-    if (!result.ok) {
-      setPlannerState({ ...plannerState, error: result.error.message });
-      return;
-    }
-
-    onChanged();
-    await loadPlanner();
+    await refreshPlanner();
   }
 
   if (plannerState.status === "loading") {
@@ -352,7 +345,7 @@ export function PlannerScreen({ mealPlanUseCases, recipeUseCases, onChanged }: P
     return (
       <EmptyView
         title="No meal plan yet"
-        message="Create a loop plan through the application layer before adding meals."
+        message="Create a local plan through the application layer before adding meals."
       />
     );
   }
@@ -361,9 +354,12 @@ export function PlannerScreen({ mealPlanUseCases, recipeUseCases, onChanged }: P
     <section className="screen-stack" aria-labelledby="planner-title">
       <div className="screen-header">
         <div>
-          <p className="section-kicker">Flexible board</p>
+          <p className="section-kicker">Calendar planner</p>
           <h2 id="planner-title">Planner</h2>
         </div>
+        <button className="primary-button" type="button" onClick={() => setSetupOpen(!setupOpen)}>
+          Setup plan
+        </button>
       </div>
 
       {plannerState.error ? (
@@ -375,13 +371,16 @@ export function PlannerScreen({ mealPlanUseCases, recipeUseCases, onChanged }: P
         <select
           aria-label="Selected meal plan"
           value={plannerState.selectedPlanId}
-          onChange={(event) =>
+          onChange={(event) => {
+            const nextPlan = plannerState.plans.find((plan) => plan.id === event.target.value);
+            setSelectedDate(anchorDateForPlan(nextPlan));
+            setSetupDraftOverride(undefined);
             setPlannerState({
               ...plannerState,
               selectedPlanId: event.target.value,
               error: undefined,
-            })
-          }
+            });
+          }}
         >
           {plannerState.plans.map((plan) => (
             <option key={plan.id} value={plan.id}>
@@ -391,321 +390,270 @@ export function PlannerScreen({ mealPlanUseCases, recipeUseCases, onChanged }: P
         </select>
       </label>
 
-      <div className="planner-mode-tabs" role="tablist" aria-label="Planner mode">
-        <button
-          aria-selected={mode === "board"}
-          className="secondary-button"
-          role="tab"
-          type="button"
-          onClick={() => setMode("board")}
-        >
-          Board
-        </button>
-        <button
-          aria-selected={mode === "templates"}
-          className="secondary-button"
-          role="tab"
-          type="button"
-          onClick={() => setMode("templates")}
-        >
-          Templates
-        </button>
-      </div>
-
-      {mode === "board" ? (
-        <BoardPlanner
-          board={selectedPlan.board}
-          boardDraft={boardDraft}
-          boardEntryDrafts={boardEntryDrafts}
-          boardMoveDrafts={boardMoveDrafts}
-          boardServingDrafts={boardServingDrafts}
-          onAddEntry={(dayId) => void addBoardEntry(dayId)}
-          onChangeBoardDraft={setBoardDraft}
-          onChangeEntryDraft={(dayId, draft) =>
-            setBoardEntryDrafts({ ...boardEntryDrafts, [dayId]: draft })
+      {setupOpen ? (
+        <PlannerSetup
+          draft={setupDraft}
+          entryDrafts={entryDrafts}
+          onAddEntry={(dayId) => void addScheduleEntry(dayId)}
+          onApply={applySetup}
+          onChangeDraft={(draft) => setSetupDraftOverride(draft)}
+          onChangeEntryDraft={(dayId, draft) => setEntryDrafts({ ...entryDrafts, [dayId]: draft })}
+          onChangeScheduleServing={(entryId, servings) =>
+            setScheduleServingDrafts({ ...scheduleServingDrafts, [entryId]: servings })
           }
-          onChangeMoveDraft={(entryId, draft) =>
-            setBoardMoveDrafts({ ...boardMoveDrafts, [entryId]: draft })
+          onChangeTargetDraft={(dayId, draft) =>
+            setTargetDrafts({ ...targetDrafts, [dayId]: draft })
           }
-          onChangeServingDraft={(entryId, servings) =>
-            setBoardServingDrafts({ ...boardServingDrafts, [entryId]: servings })
-          }
-          onConfigure={() => void configureBoard()}
-          onMoveEntry={(entry) => void moveBoardEntry(entry)}
-          onRemoveEntry={(entryId) => void removeBoardEntry(entryId)}
-          onUpdateServings={(entryId) => void changeBoardServings(entryId)}
-          recipes={plannerState.recipes}
-        />
-      ) : (
-        <TemplatePlanner
-          dayLabel={dayLabel}
-          onAddDay={() => void addDay()}
-          onAddRecipe={(dayId) => void addRecipeToTemplateDay(dayId)}
-          onChangeDayLabel={setDayLabel}
-          onChangeEntryDraft={(dayId, draft) =>
-            setTemplateEntryDrafts({ ...templateEntryDrafts, [dayId]: draft })
-          }
-          onChangeMoveDraft={(entryId, dayId) =>
-            setTemplateMoveDrafts({ ...templateMoveDrafts, [entryId]: dayId })
-          }
-          onChangeServingDraft={(entryId, servings) =>
-            setTemplateServingDrafts({ ...templateServingDrafts, [entryId]: servings })
-          }
-          onMoveEntry={(entryId) => void moveTemplateEntry(entryId)}
-          onRemoveEntry={(entryId) => void removeTemplateEntry(entryId)}
-          onUpdateServings={(entryId) => void changeTemplateServings(entryId)}
+          onRemoveEntry={(entryId) => void removeScheduleEntry(entryId)}
+          onSaveTargets={(dayId) => void saveTargets(dayId)}
+          onUpdateScheduleEntry={(entryId) => void updateScheduleEntryServings(entryId)}
           plan={selectedPlan}
           recipes={plannerState.recipes}
-          templateEntryDrafts={templateEntryDrafts}
-          templateMoveDrafts={templateMoveDrafts}
-          templateServingDrafts={templateServingDrafts}
+          scheduleServingDrafts={scheduleServingDrafts}
+          targetDrafts={targetDrafts}
         />
-      )}
+      ) : null}
+
+      <PlannerCalendar
+        calendarDays={calendarDays}
+        calendarView={calendarView}
+        onChangeDate={setSelectedDate}
+        onChangeView={setCalendarView}
+        onMoveRange={(direction) =>
+          setSelectedDate(
+            addDaysToLocalDate(activeDate, direction * (calendarView === "week" ? 7 : 30)),
+          )
+        }
+        selectedDate={activeDate}
+      />
+
+      {selectedDay ? (
+        <PlannerDayDetail
+          day={selectedDay}
+          onChangeDateServing={(entryId, servings) =>
+            setDateServingDrafts({ ...dateServingDrafts, [entryId]: servings })
+          }
+          onOpenRecipe={onOpenRecipe}
+          onSaveDateServing={(entryId) => void saveDateServings(entryId)}
+          onToggleEaten={(entryId, eaten) => void setEntryEaten(entryId, eaten)}
+          recipes={plannerState.recipes}
+          servingDrafts={dateServingDrafts}
+        />
+      ) : null}
     </section>
   );
 }
 
-function BoardPlanner({
-  board,
-  boardDraft,
-  boardEntryDrafts,
-  boardMoveDrafts,
-  boardServingDrafts,
+function PlannerSetup({
+  draft,
+  entryDrafts,
   onAddEntry,
-  onChangeBoardDraft,
+  onApply,
+  onChangeDraft,
   onChangeEntryDraft,
-  onChangeMoveDraft,
-  onChangeServingDraft,
-  onConfigure,
-  onMoveEntry,
+  onChangeScheduleServing,
+  onChangeTargetDraft,
   onRemoveEntry,
-  onUpdateServings,
+  onSaveTargets,
+  onUpdateScheduleEntry,
+  plan,
   recipes,
+  scheduleServingDrafts,
+  targetDrafts,
 }: {
-  board: PlannerBoard | undefined;
-  boardDraft: BoardConfigurationDraft;
-  boardEntryDrafts: Record<string, BoardEntryDraft>;
-  boardMoveDrafts: Record<string, BoardMoveDraft>;
-  boardServingDrafts: Record<string, number>;
+  draft: SetupDraft;
+  entryDrafts: Record<string, EntryDraft>;
   onAddEntry: (dayId: string) => void;
-  onChangeBoardDraft: (draft: BoardConfigurationDraft) => void;
-  onChangeEntryDraft: (dayId: string, draft: BoardEntryDraft) => void;
-  onChangeMoveDraft: (entryId: string, draft: BoardMoveDraft) => void;
-  onChangeServingDraft: (entryId: string, servings: number) => void;
-  onConfigure: () => void;
-  onMoveEntry: (entry: PlannerBoardEntry) => void;
+  onApply: () => void;
+  onChangeDraft: (draft: SetupDraft) => void;
+  onChangeEntryDraft: (dayId: string, draft: EntryDraft) => void;
+  onChangeScheduleServing: (entryId: string, servings: number) => void;
+  onChangeTargetDraft: (dayId: string, draft: TargetDraft) => void;
   onRemoveEntry: (entryId: string) => void;
-  onUpdateServings: (entryId: string) => void;
+  onSaveTargets: (dayId: string) => void;
+  onUpdateScheduleEntry: (entryId: string) => void;
+  plan: MealPlan;
   recipes: ReadonlyArray<Recipe>;
+  scheduleServingDrafts: Record<string, number>;
+  targetDrafts: Record<string, TargetDraft>;
 }) {
-  if (!board) {
-    return <EmptyView title="No board yet" message="Configure a planner board to add meals." />;
-  }
+  const days = plan.schedule?.days ?? [];
 
   return (
-    <div className="screen-stack" role="tabpanel" aria-label="Planner board">
-      <div className="planner-board-config">
-        <label>
-          <span>Preset</span>
-          <select
-            aria-label="Planner board preset"
-            value={boardDraft.preset}
-            onChange={(event) =>
-              onChangeBoardDraft({
-                ...boardDraft,
-                preset: event.target.value as PlannerBoardPreset,
-              })
-            }
-          >
-            <option value="weekly">Weekly</option>
-            <option value="rolling7">Rolling 7</option>
-            <option value="month">Month list</option>
-            <option value="customLoop">Custom loop</option>
-          </select>
-        </label>
-        <label>
-          <span>Start date</span>
-          <input
-            aria-label="Board start date"
-            type="date"
-            value={boardDraft.startDate}
-            onChange={(event) =>
-              onChangeBoardDraft({ ...boardDraft, startDate: event.target.value })
-            }
-          />
-        </label>
-        <label>
-          <span>Slots</span>
-          <input
-            aria-label="Board slot templates"
-            value={boardDraft.slotLabels}
-            onChange={(event) =>
-              onChangeBoardDraft({ ...boardDraft, slotLabels: event.target.value })
-            }
-          />
-        </label>
-        <label>
-          <span>Days</span>
-          <input
-            aria-label="Board custom day labels"
-            value={boardDraft.customDayLabels}
-            onChange={(event) =>
-              onChangeBoardDraft({ ...boardDraft, customDayLabels: event.target.value })
-            }
-          />
-        </label>
-        <button className="primary-button" type="button" onClick={onConfigure}>
-          Apply board
+    <section className="planner-setup" aria-labelledby="planner-setup-title">
+      <div className="screen-header screen-header--compact">
+        <div>
+          <p className="section-kicker">Setup</p>
+          <h3 id="planner-setup-title">Plan setup</h3>
+        </div>
+        <button className="primary-button" type="button" onClick={onApply}>
+          Apply setup
         </button>
       </div>
 
+      <div className="planner-setup-grid">
+        <label>
+          <span>Plan type</span>
+          <select
+            aria-label="Planner setup mode"
+            value={draft.mode}
+            onChange={(event) =>
+              onChangeDraft({ ...draft, mode: event.target.value as MealPlanScheduleMode })
+            }
+          >
+            <option value="weekly">Weekly Mon-Sun</option>
+            <option value="customLoop">Custom loop</option>
+            <option value="individualDates">Individual dates</option>
+          </select>
+        </label>
+        {draft.mode !== "individualDates" ? (
+          <label>
+            <span>Start date</span>
+            <input
+              aria-label="Planner setup start date"
+              type="date"
+              value={draft.startDate}
+              onChange={(event) => onChangeDraft({ ...draft, startDate: event.target.value })}
+            />
+          </label>
+        ) : null}
+        {draft.mode === "customLoop" ? (
+          <label className="full-span">
+            <span>Custom loop days</span>
+            <input
+              aria-label="Custom loop day labels"
+              value={draft.dayLabels}
+              onChange={(event) => onChangeDraft({ ...draft, dayLabels: event.target.value })}
+            />
+          </label>
+        ) : null}
+        {draft.mode === "individualDates" ? (
+          <label className="full-span">
+            <span>Individual dates</span>
+            <input
+              aria-label="Individual planner dates"
+              value={draft.individualDates}
+              onChange={(event) => onChangeDraft({ ...draft, individualDates: event.target.value })}
+            />
+          </label>
+        ) : null}
+      </div>
+
       <div className="planner-days">
-        {board.days.map((day) => (
-          <BoardDay
-            board={board}
+        {days.map((day) => (
+          <ScheduleSetupDay
             day={day}
-            draft={boardEntryDrafts[day.id] ?? defaultBoardEntryDraft()}
+            draft={entryDrafts[day.id] ?? defaultEntryDraft()}
             key={day.id}
-            moveDrafts={boardMoveDrafts}
             onAddEntry={onAddEntry}
             onChangeDraft={onChangeEntryDraft}
-            onChangeMoveDraft={onChangeMoveDraft}
-            onChangeServingDraft={onChangeServingDraft}
-            onMoveEntry={onMoveEntry}
+            onChangeServing={onChangeScheduleServing}
+            onChangeTargetDraft={onChangeTargetDraft}
             onRemoveEntry={onRemoveEntry}
-            onUpdateServings={onUpdateServings}
+            onSaveTargets={onSaveTargets}
+            onUpdateEntry={onUpdateScheduleEntry}
             recipes={recipes}
-            servingDrafts={boardServingDrafts}
+            servingDrafts={scheduleServingDrafts}
+            targetDraft={targetDrafts[day.id] ?? targetDraftFromTargets(day.targets)}
           />
         ))}
       </div>
-    </div>
+    </section>
   );
 }
 
-function BoardDay({
-  board,
+function ScheduleSetupDay({
   day,
   draft,
-  moveDrafts,
   onAddEntry,
   onChangeDraft,
-  onChangeMoveDraft,
-  onChangeServingDraft,
-  onMoveEntry,
+  onChangeServing,
+  onChangeTargetDraft,
   onRemoveEntry,
-  onUpdateServings,
+  onSaveTargets,
+  onUpdateEntry,
   recipes,
   servingDrafts,
+  targetDraft,
 }: {
-  board: PlannerBoard;
-  day: PlannerDayBucket;
-  draft: BoardEntryDraft;
-  moveDrafts: Record<string, BoardMoveDraft>;
+  day: MealPlanDayDefinition;
+  draft: EntryDraft;
   onAddEntry: (dayId: string) => void;
-  onChangeDraft: (dayId: string, draft: BoardEntryDraft) => void;
-  onChangeMoveDraft: (entryId: string, draft: BoardMoveDraft) => void;
-  onChangeServingDraft: (entryId: string, servings: number) => void;
-  onMoveEntry: (entry: PlannerBoardEntry) => void;
+  onChangeDraft: (dayId: string, draft: EntryDraft) => void;
+  onChangeServing: (entryId: string, servings: number) => void;
+  onChangeTargetDraft: (dayId: string, draft: TargetDraft) => void;
   onRemoveEntry: (entryId: string) => void;
-  onUpdateServings: (entryId: string) => void;
+  onSaveTargets: (dayId: string) => void;
+  onUpdateEntry: (entryId: string) => void;
   recipes: ReadonlyArray<Recipe>;
   servingDrafts: Record<string, number>;
+  targetDraft: TargetDraft;
 }) {
   return (
-    <section className="planner-day" aria-labelledby={`${day.id}-board-title`}>
+    <section className="planner-day" aria-labelledby={`${day.id}-setup-title`}>
       <div className="screen-header screen-header--compact">
-        <h3 id={`${day.id}-board-title`}>{day.label}</h3>
-        {day.date ? <span className="pill">{day.date}</span> : null}
+        <h4 id={`${day.id}-setup-title`}>{day.label}</h4>
+      </div>
+
+      <div className="planner-target-grid" role="group" aria-label={`${day.label} daily targets`}>
+        {nutritionMetrics.map((item) => (
+          <label key={item.metric}>
+            <span>{item.label} target</span>
+            <input
+              aria-label={`${day.label} ${item.label} target`}
+              min="0"
+              type="number"
+              value={targetDraft[item.metric]}
+              onChange={(event) =>
+                onChangeTargetDraft(day.id, {
+                  ...targetDraft,
+                  [item.metric]: event.target.value,
+                })
+              }
+            />
+          </label>
+        ))}
+        <button className="secondary-button" type="button" onClick={() => onSaveTargets(day.id)}>
+          Save targets
+        </button>
       </div>
 
       {day.entries.length > 0 ? (
-        <ul className="compact-list planner-entry-list" aria-label={`${day.label} board meals`}>
+        <ul className="compact-list planner-entry-list" aria-label={`${day.label} setup meals`}>
           {day.entries.map((entry) => {
-            const recipe = recipeById(recipes, entry.recipeId);
             const title = recipeTitle(recipes, entry.recipeId);
-            const nutritionText = recipe ? plannedNutritionText(recipe, entry.servings) : "";
-            const moveDraft = moveDrafts[entry.id] ?? {
-              targetDayId: day.id,
-              targetSlotId: entry.slotId ?? noSlotValue,
-              targetCustomSlotLabel: entry.customSlotLabel ?? "",
-            };
-
             return (
               <li key={entry.id}>
                 <span className="recipe-card__main">
                   <span>{title}</span>
-                  <span className="muted-text">
-                    {boardEntryMeta(board, entry)}
-                    {nutritionText ? ` · Nutrition: ${nutritionText}` : ""}
-                  </span>
+                  <span className="muted-text">{entryMeta(entry.slotLabel, entry.context)}</span>
                 </span>
                 <label className="inline-field">
                   <span>Servings</span>
                   <input
-                    aria-label={`Board servings for ${title}`}
+                    aria-label={`Setup servings for ${title}`}
                     min="1"
                     type="number"
                     value={servingDrafts[entry.id] ?? entry.servings}
-                    onChange={(event) => onChangeServingDraft(entry.id, Number(event.target.value))}
+                    onChange={(event) => onChangeServing(entry.id, Number(event.target.value))}
                   />
                 </label>
                 <div className="planner-entry-actions">
                   <button
-                    aria-label={`Update ${title} board entry`}
+                    aria-label={`Update ${title} setup entry`}
                     className="text-button"
                     type="button"
-                    onClick={() => onUpdateServings(entry.id)}
+                    onClick={() => onUpdateEntry(entry.id)}
                   >
-                    Update board entry
-                  </button>
-                  <label>
-                    <span>Day</span>
-                    <select
-                      aria-label={`Move ${title} to day`}
-                      value={moveDraft.targetDayId}
-                      onChange={(event) =>
-                        onChangeMoveDraft(entry.id, {
-                          ...moveDraft,
-                          targetDayId: event.target.value,
-                        })
-                      }
-                    >
-                      {board.days.map((targetDay) => (
-                        <option key={targetDay.id} value={targetDay.id}>
-                          {targetDay.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <BoardSlotSelect
-                    ariaLabel={`Move ${title} to slot`}
-                    board={board}
-                    customSlotLabel={moveDraft.targetCustomSlotLabel}
-                    onChange={(slotId, customSlotLabel) =>
-                      onChangeMoveDraft(entry.id, {
-                        ...moveDraft,
-                        targetSlotId: slotId,
-                        targetCustomSlotLabel: customSlotLabel,
-                      })
-                    }
-                    value={moveDraft.targetSlotId}
-                  />
-                  <button
-                    aria-label={`Move ${title} board entry`}
-                    className="text-button"
-                    type="button"
-                    onClick={() => onMoveEntry(entry)}
-                  >
-                    Move board entry
+                    Update
                   </button>
                   <button
-                    aria-label={`Remove ${title} board entry`}
+                    aria-label={`Remove ${title} setup entry`}
                     className="text-button"
                     type="button"
                     onClick={() => onRemoveEntry(entry.id)}
                   >
-                    Remove board entry
+                    Remove
                   </button>
                 </div>
               </li>
@@ -713,14 +661,14 @@ function BoardDay({
           })}
         </ul>
       ) : (
-        <EmptyView title="No meals planned" message="Add a saved recipe to this board day." />
+        <EmptyView title="No meals planned" message="Add a saved recipe to this day." />
       )}
 
       <div className="planner-day__add">
         <label>
           <span>Recipe</span>
           <select
-            aria-label={`Board recipe for ${day.label}`}
+            aria-label={`Setup recipe for ${day.label}`}
             value={draft.recipeId}
             onChange={(event) => onChangeDraft(day.id, { ...draft, recipeId: event.target.value })}
           >
@@ -735,7 +683,7 @@ function BoardDay({
         <label>
           <span>Servings</span>
           <input
-            aria-label={`Board servings for ${day.label}`}
+            aria-label={`Setup new servings for ${day.label}`}
             min="1"
             type="number"
             value={draft.servings}
@@ -744,19 +692,18 @@ function BoardDay({
             }
           />
         </label>
-        <BoardSlotSelect
-          ariaLabel={`Board slot for ${day.label}`}
-          board={board}
-          customSlotLabel={draft.customSlotLabel}
-          onChange={(slotId, customSlotLabel) =>
-            onChangeDraft(day.id, { ...draft, slotId, customSlotLabel })
-          }
-          value={draft.slotId}
-        />
+        <label>
+          <span>Meal label</span>
+          <input
+            aria-label={`Setup meal label for ${day.label}`}
+            value={draft.slotLabel}
+            onChange={(event) => onChangeDraft(day.id, { ...draft, slotLabel: event.target.value })}
+          />
+        </label>
         <label>
           <span>Context</span>
           <select
-            aria-label={`Board context for ${day.label}`}
+            aria-label={`Setup context for ${day.label}`}
             value={draft.context}
             onChange={(event) =>
               onChangeDraft(day.id, {
@@ -770,294 +717,276 @@ function BoardDay({
             <option value="prep">Prep</option>
           </select>
         </label>
-        <button className="secondary-button" type="button" onClick={() => onAddEntry(day.id)}>
-          Add to board
+        <button
+          className="secondary-button"
+          disabled={!draft.recipeId}
+          type="button"
+          onClick={() => onAddEntry(day.id)}
+        >
+          Add meal
         </button>
       </div>
     </section>
   );
 }
 
-function BoardSlotSelect({
-  ariaLabel,
-  board,
-  customSlotLabel,
-  onChange,
-  value,
+function PlannerCalendar({
+  calendarDays,
+  calendarView,
+  onChangeDate,
+  onChangeView,
+  onMoveRange,
+  selectedDate,
 }: {
-  ariaLabel: string;
-  board: PlannerBoard;
-  customSlotLabel: string;
-  onChange: (slotId: string, customSlotLabel: string) => void;
-  value: string;
+  calendarDays: ReadonlyArray<MealPlanCalendarDaySummary>;
+  calendarView: CalendarView;
+  onChangeDate: (date: string) => void;
+  onChangeView: (view: CalendarView) => void;
+  onMoveRange: (direction: -1 | 1) => void;
+  selectedDate: string;
 }) {
   return (
-    <>
-      <label>
-        <span>Slot</span>
-        <select
-          aria-label={ariaLabel}
-          value={value}
-          onChange={(event) => onChange(event.target.value, customSlotLabel)}
-        >
-          <option value={noSlotValue}>No slot</option>
-          {board.slotTemplates.map((slot) => (
-            <option key={slot.id} value={slot.id}>
-              {slot.label}
-            </option>
-          ))}
-          <option value={customSlotValue}>Custom slot</option>
-        </select>
-      </label>
-      {value === customSlotValue ? (
-        <label>
-          <span>Custom slot</span>
-          <input
-            aria-label={ariaLabel.replace("slot", "custom slot")}
-            value={customSlotLabel}
-            onChange={(event) => onChange(value, event.target.value)}
-          />
-        </label>
-      ) : null}
-    </>
-  );
-}
+    <section className="planner-calendar" aria-labelledby="planner-calendar-title">
+      <div className="screen-header screen-header--compact">
+        <div>
+          <p className="section-kicker">{calendarView}</p>
+          <h3 id="planner-calendar-title">Calendar</h3>
+        </div>
+        <div className="action-row">
+          <button className="secondary-button" type="button" onClick={() => onMoveRange(-1)}>
+            Previous
+          </button>
+          <button className="secondary-button" type="button" onClick={() => onMoveRange(1)}>
+            Next
+          </button>
+        </div>
+      </div>
 
-function TemplatePlanner({
-  dayLabel,
-  onAddDay,
-  onAddRecipe,
-  onChangeDayLabel,
-  onChangeEntryDraft,
-  onChangeMoveDraft,
-  onChangeServingDraft,
-  onMoveEntry,
-  onRemoveEntry,
-  onUpdateServings,
-  plan,
-  recipes,
-  templateEntryDrafts,
-  templateMoveDrafts,
-  templateServingDrafts,
-}: {
-  dayLabel: string;
-  onAddDay: () => void;
-  onAddRecipe: (dayId: string) => void;
-  onChangeDayLabel: (label: string) => void;
-  onChangeEntryDraft: (dayId: string, draft: { recipeId: string; servings: number }) => void;
-  onChangeMoveDraft: (entryId: string, dayId: string) => void;
-  onChangeServingDraft: (entryId: string, servings: number) => void;
-  onMoveEntry: (entryId: string) => void;
-  onRemoveEntry: (entryId: string) => void;
-  onUpdateServings: (entryId: string) => void;
-  plan: MealPlan;
-  recipes: ReadonlyArray<Recipe>;
-  templateEntryDrafts: Record<string, { recipeId: string; servings: number }>;
-  templateMoveDrafts: Record<string, string>;
-  templateServingDrafts: Record<string, number>;
-}) {
-  return (
-    <div className="screen-stack" role="tabpanel" aria-label="Planner templates">
-      <div className="form-grid">
-        <label>
-          <span>New day</span>
-          <input
-            aria-label="New loop day label"
-            value={dayLabel}
-            onChange={(event) => onChangeDayLabel(event.target.value)}
-          />
-        </label>
-        <button className="primary-button" type="button" onClick={onAddDay}>
-          Add day
+      <div className="segmented-control" role="tablist" aria-label="Calendar view">
+        <button
+          aria-selected={calendarView === "week"}
+          className="secondary-button"
+          role="tab"
+          type="button"
+          onClick={() => onChangeView("week")}
+        >
+          Week
+        </button>
+        <button
+          aria-selected={calendarView === "month"}
+          className="secondary-button"
+          role="tab"
+          type="button"
+          onClick={() => onChangeView("month")}
+        >
+          Month
         </button>
       </div>
 
-      <div className="planner-days">
-        {plan.loopDays.map((day) => {
-          const draft = templateEntryDrafts[day.id] ?? { recipeId: "", servings: 1 };
-
-          return (
-            <section className="planner-day" aria-labelledby={`${day.id}-title`} key={day.id}>
-              <div className="screen-header screen-header--compact">
-                <h3 id={`${day.id}-title`}>{day.label}</h3>
-                <span className="pill">{day.preset}</span>
-              </div>
-
-              {day.entries.length > 0 ? (
-                <ul className="compact-list" aria-label={`${day.label} meals`}>
-                  {day.entries.map((entry) => {
-                    const recipe = recipeById(recipes, entry.recipeId);
-                    const title = recipeTitle(recipes, entry.recipeId);
-                    const nutritionText = recipe
-                      ? plannedNutritionText(recipe, entry.servings)
-                      : "";
-
-                    return (
-                      <li key={entry.id}>
-                        <span className="recipe-card__main">
-                          <span>{title}</span>
-                          {nutritionText ? (
-                            <span className="muted-text">Nutrition: {nutritionText}</span>
-                          ) : null}
-                        </span>
-                        <label className="inline-field">
-                          <span>Servings</span>
-                          <input
-                            aria-label={`Servings for ${title}`}
-                            min="1"
-                            type="number"
-                            value={templateServingDrafts[entry.id] ?? entry.servings}
-                            onChange={(event) =>
-                              onChangeServingDraft(entry.id, Number(event.target.value))
-                            }
-                          />
-                        </label>
-                        <label>
-                          <span>Move to</span>
-                          <select
-                            aria-label={`Move ${title} to template day`}
-                            value={templateMoveDrafts[entry.id] ?? day.id}
-                            onChange={(event) => onChangeMoveDraft(entry.id, event.target.value)}
-                          >
-                            {plan.loopDays.map((targetDay) => (
-                              <option key={targetDay.id} value={targetDay.id}>
-                                {targetDay.label}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <button
-                          aria-label={`Update ${title} template entry`}
-                          className="text-button"
-                          type="button"
-                          onClick={() => onUpdateServings(entry.id)}
-                        >
-                          Update
-                        </button>
-                        <button
-                          aria-label={`Move ${title} template entry`}
-                          className="text-button"
-                          type="button"
-                          onClick={() => onMoveEntry(entry.id)}
-                        >
-                          Move template entry
-                        </button>
-                        <button
-                          aria-label={`Remove ${title} template entry`}
-                          className="text-button"
-                          type="button"
-                          onClick={() => onRemoveEntry(entry.id)}
-                        >
-                          Remove
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              ) : (
-                <EmptyView title="No meals planned" message="Add a saved recipe to this day." />
-              )}
-
-              <div className="form-grid">
-                <label>
-                  <span>Recipe</span>
-                  <select
-                    aria-label={`Recipe for ${day.label}`}
-                    value={draft.recipeId}
-                    onChange={(event) =>
-                      onChangeEntryDraft(day.id, { ...draft, recipeId: event.target.value })
-                    }
-                  >
-                    <option value="">Choose recipe</option>
-                    {recipes.map((recipe) => (
-                      <option key={recipe.id} value={recipe.id}>
-                        {recipe.title}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  <span>Servings</span>
-                  <input
-                    aria-label={`New servings for ${day.label}`}
-                    min="1"
-                    type="number"
-                    value={draft.servings}
-                    onChange={(event) =>
-                      onChangeEntryDraft(day.id, {
-                        ...draft,
-                        servings: Number(event.target.value),
-                      })
-                    }
-                  />
-                </label>
-                <button
-                  className="secondary-button"
-                  type="button"
-                  onClick={() => onAddRecipe(day.id)}
-                >
-                  Add recipe
-                </button>
-              </div>
-            </section>
-          );
-        })}
+      <div className="planner-calendar-grid" aria-label={`${calendarView} planner days`}>
+        {calendarDays.map((day) => (
+          <button
+            aria-label={`Open ${day.date}`}
+            className={`planner-calendar-day${
+              day.date === selectedDate ? " planner-calendar-day--selected" : ""
+            }`}
+            key={day.date}
+            type="button"
+            onClick={() => onChangeDate(day.date)}
+          >
+            <span>{day.date}</span>
+            <strong>{day.label}</strong>
+            <span className="muted-text">
+              {day.entries.length} meals · Planned {metricText(day.plannedTotals)}
+            </span>
+            <span className="muted-text">Eaten {metricText(day.eatenTotals)}</span>
+          </button>
+        ))}
       </div>
-    </div>
+    </section>
   );
 }
 
-function defaultBoardEntryDraft(): BoardEntryDraft {
+function PlannerDayDetail({
+  day,
+  onChangeDateServing,
+  onOpenRecipe,
+  onSaveDateServing,
+  onToggleEaten,
+  recipes,
+  servingDrafts,
+}: {
+  day: MealPlanCalendarDaySummary;
+  onChangeDateServing: (entryId: string, servings: number) => void;
+  onOpenRecipe?: (recipeId: string, servings: number, openCookMode: boolean) => void;
+  onSaveDateServing: (entryId: string) => void;
+  onToggleEaten: (entryId: string, eaten: boolean) => void;
+  recipes: ReadonlyArray<Recipe>;
+  servingDrafts: Record<string, number>;
+}) {
+  return (
+    <section className="planner-day-detail" aria-labelledby="planner-day-detail-title">
+      <div className="screen-header screen-header--compact">
+        <div>
+          <p className="section-kicker">{day.date}</p>
+          <h3 id="planner-day-detail-title">{day.label}</h3>
+        </div>
+      </div>
+
+      <div className="planner-summary-grid" aria-label={`${day.label} macro summary`}>
+        <NutritionSummary label="Target" values={day.targets} />
+        <NutritionSummary label="Planned" values={day.plannedTotals} />
+        <NutritionSummary label="Eaten" values={day.eatenTotals} />
+        <NutritionSummary label="Left to target" values={day.leftToTarget} />
+        <NutritionSummary label="Planned left" values={day.plannedLeft} />
+      </div>
+
+      {day.entries.length > 0 ? (
+        <div className="planner-meal-list" aria-label={`${day.label} meals`}>
+          {day.entries.map((entry) => {
+            const recipe = recipes.find((candidate) => candidate.id === entry.recipeId);
+            const title = recipe?.title ?? entry.title ?? "Missing recipe";
+            return (
+              <details className="planner-meal-details" key={entry.id}>
+                <summary>
+                  <span>
+                    <strong>{title}</strong>
+                    <span className="muted-text">
+                      {" "}
+                      · {formatNutritionAmount(entry.effectiveServings)} servings ·{" "}
+                      {metricText(entry.nutrition)}
+                    </span>
+                  </span>
+                  <label className="checkbox-row">
+                    <input
+                      aria-label={`Mark ${title} eaten on ${day.date}`}
+                      checked={entry.eaten}
+                      type="checkbox"
+                      onChange={(event) => onToggleEaten(entry.id, event.target.checked)}
+                    />
+                    Eaten
+                  </label>
+                </summary>
+                <div className="planner-meal-details__body">
+                  {recipe ? <p>{recipe.description}</p> : null}
+                  <label className="inline-field">
+                    <span>Servings for this date</span>
+                    <input
+                      aria-label={`Date servings for ${title}`}
+                      min="1"
+                      type="number"
+                      value={servingDrafts[entry.id] ?? entry.effectiveServings}
+                      onChange={(event) =>
+                        onChangeDateServing(entry.id, Number(event.target.value))
+                      }
+                    />
+                  </label>
+                  <div className="action-row">
+                    <button
+                      aria-label={`Save ${title} date servings`}
+                      className="secondary-button"
+                      type="button"
+                      onClick={() => onSaveDateServing(entry.id)}
+                    >
+                      Save servings
+                    </button>
+                    {onOpenRecipe ? (
+                      <button
+                        aria-label={`Cook ${title}`}
+                        className="primary-button"
+                        type="button"
+                        onClick={() => onOpenRecipe(entry.recipeId, entry.effectiveServings, true)}
+                      >
+                        Cook recipe
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              </details>
+            );
+          })}
+        </div>
+      ) : (
+        <EmptyView title="No meals for this date" message="Use Setup plan to add meals." />
+      )}
+    </section>
+  );
+}
+
+function NutritionSummary({ label, values }: { label: string; values: PlannerNutritionTargets }) {
+  return (
+    <section className="planner-summary-item" aria-label={label}>
+      <strong>{label}</strong>
+      <span>{metricText(values)}</span>
+    </section>
+  );
+}
+
+function setupDraftFromPlan(plan: MealPlan): SetupDraft {
+  const schedule = plan.schedule;
+
+  if (!schedule) {
+    return defaultSetupDraft();
+  }
+
+  if (schedule.mode === "individualDates") {
+    return {
+      mode: "individualDates",
+      startDate: anchorDateForPlan(plan),
+      dayLabels: "",
+      individualDates: schedule.days.map((day) => day.date).join(", "),
+    };
+  }
+
+  return {
+    mode: schedule.mode,
+    startDate: schedule.startDate ?? anchorDateForPlan(plan),
+    dayLabels: schedule.days.map((day) => day.label).join(", "),
+    individualDates: "",
+  };
+}
+
+function defaultSetupDraft(): SetupDraft {
+  return {
+    mode: "customLoop",
+    startDate: "2026-05-22",
+    dayLabels: "Training Day, Non-training Day",
+    individualDates: "2026-05-22",
+  };
+}
+
+function defaultEntryDraft(): EntryDraft {
   return {
     recipeId: "",
     servings: 1,
-    slotId: noSlotValue,
-    customSlotLabel: "",
+    slotLabel: "",
     context: "eat",
   };
 }
 
-function defaultBoardConfigurationDraft(): BoardConfigurationDraft {
+function targetDraftFromTargets(targets: PlannerNutritionTargets | undefined): TargetDraft {
   return {
-    preset: "customLoop",
-    startDate: "",
-    slotLabels: slotLabelsText(DEFAULT_PLANNER_SLOT_TEMPLATES),
-    customDayLabels: "Training Day, Non-training Day",
+    calories: valueToDraft(targets?.calories),
+    protein: valueToDraft(targets?.protein),
+    fat: valueToDraft(targets?.fat),
+    carbs: valueToDraft(targets?.carbs),
   };
 }
 
-function boardConfigurationDraftFromBoard(board: PlannerBoard): BoardConfigurationDraft {
-  return {
-    preset: board.preset,
-    startDate: board.startDate ?? "",
-    slotLabels: slotLabelsText(board.slotTemplates),
-    customDayLabels: board.days.map((day) => day.label).join(", "),
-  };
-}
-
-function boardConfigurationDraftKey(plan: MealPlan) {
-  const board = plan.board;
-
-  if (!board) {
-    return `${plan.id}:${plan.updatedAt}:no-board`;
+function targetsFromDraft(draft: TargetDraft | undefined): PlannerNutritionTargets {
+  if (!draft) {
+    return {};
   }
 
-  const slots = board.slotTemplates.map((slot) => `${slot.id}:${slot.label}`).join("|");
-  const days = board.days.map((day) => `${day.id}:${day.label}:${day.date ?? ""}`).join("|");
+  return nutritionMetrics.reduce<PlannerNutritionTargets>((targets, item) => {
+    const value = Number(draft[item.metric]);
 
-  return `${plan.id}:${plan.updatedAt}:${board.preset}:${board.startDate ?? ""}:${slots}:${days}`;
-}
+    if (draft[item.metric].trim().length > 0 && Number.isFinite(value)) {
+      targets[item.metric] = value;
+    }
 
-function slotPayload(slotId: string, customSlotLabel: string) {
-  if (slotId === customSlotValue) {
-    return { customSlotLabel };
-  }
-
-  return { slotId: slotIdOrUndefined(slotId) };
-}
-
-function slotIdOrUndefined(slotId: string | undefined) {
-  return slotId && slotId !== noSlotValue && slotId !== customSlotValue ? slotId : undefined;
+    return targets;
+  }, {});
 }
 
 function labelsFromText(value: string) {
@@ -1067,63 +996,75 @@ function labelsFromText(value: string) {
     .filter(Boolean);
 }
 
-function slotTemplatesFromText(value: string): ReadonlyArray<PlannerSlotTemplate> {
-  const labels = labelsFromText(value);
-
-  if (labels.length === 0) {
-    return DEFAULT_PLANNER_SLOT_TEMPLATES;
-  }
-
-  return labels.map((label, index) => ({
-    id: stableSlotId(label, index),
-    label,
-  }));
-}
-
-function slotLabelsText(slots: ReadonlyArray<PlannerSlotTemplate>) {
-  return slots.map((slot) => slot.label).join(", ");
-}
-
-function stableSlotId(label: string, index: number) {
-  const slug = label
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-
-  return `slot-${slug || "custom"}-${index + 1}`;
-}
-
-function boardEntryMeta(board: PlannerBoard, entry: PlannerBoardEntry) {
-  const slotLabel =
-    entry.customSlotLabel ??
-    board.slotTemplates.find((slot) => slot.id === entry.slotId)?.label ??
-    "No slot";
-  const context = entry.context ?? "eat";
-
-  return `${slotLabel} · ${context}`;
+function valueToDraft(value: number | undefined) {
+  return value === undefined ? "" : String(value);
 }
 
 function recipeTitle(recipes: ReadonlyArray<Recipe>, recipeId: string) {
-  return recipeById(recipes, recipeId)?.title ?? `Missing recipe ${recipeId}`;
+  return recipes.find((recipe) => recipe.id === recipeId)?.title ?? "Missing recipe";
 }
 
-function recipeById(recipes: ReadonlyArray<Recipe>, recipeId: string) {
-  return recipes.find((recipe) => recipe.id === recipeId);
+function entryMeta(slotLabel: string | undefined, context: PlannedMealEntryContext | undefined) {
+  return [slotLabel, context].filter(Boolean).join(" · ") || "Meal";
 }
 
-function plannedNutritionText(recipe: Recipe, servings: number) {
-  const summary = getPlannedNutritionSummary(recipe, servings);
+function metricText(values: PlannerNutritionTargets) {
+  const parts = nutritionMetrics.flatMap((item) => {
+    const value = values[item.metric];
+    return value === undefined
+      ? []
+      : [`${item.label} ${formatNutritionAmount(value)} ${item.unit}`];
+  });
 
-  if (summary.length === 0) {
-    return "";
+  return parts.length > 0 ? parts.join(" · ") : "No macro data";
+}
+
+function anchorDateForPlan(plan: MealPlan | undefined) {
+  if (!plan) {
+    return "2026-05-22";
   }
 
-  return summary
-    .map(
-      (item) =>
-        `${item.label} ${formatNutritionAmount(item.plannedAmount ?? item.recipeAmount)} ${
-          item.unit
-        }`,
-    )
-    .join(" · ");
+  if (plan.schedule?.mode === "customLoop" || plan.schedule?.mode === "weekly") {
+    return plan.schedule.startDate ?? dateFromIso(plan.createdAt);
+  }
+
+  if (plan.schedule?.mode === "individualDates") {
+    return plan.schedule.days[0]?.date ?? dateFromIso(plan.createdAt);
+  }
+
+  if (plan.board?.startDate) {
+    return plan.board.startDate;
+  }
+
+  return dateFromIso(plan.createdAt);
+}
+
+function dateFromIso(value: string) {
+  const candidate = value.slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(candidate) ? candidate : "2026-05-22";
+}
+
+function calendarRangeStart(date: string, view: CalendarView) {
+  if (view === "month") {
+    return `${date.slice(0, 8)}01`;
+  }
+
+  return addDaysToLocalDate(date, -localWeekdayIndex(date));
+}
+
+function daysInMonth(date: string) {
+  const [year, month] = date.split("-").map(Number);
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+
+function localWeekdayIndex(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  const utcDay = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+  return utcDay === 0 ? 6 : utcDay - 1;
+}
+
+function addDaysToLocalDate(value: string, days: number) {
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day + days));
+  return date.toISOString().slice(0, 10);
 }

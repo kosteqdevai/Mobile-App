@@ -1,6 +1,8 @@
-# LaCucina
+# Comero
 
-LaCucina is a planning-stage recipe and personal cookbook app focused on saving recipes, organizing them into a flexible cookbook, scaling ingredient quantities by servings, and using saved recipes in simple meal-planning loops.
+Comero is a planning-stage recipe and personal cookbook app focused on saving recipes, organizing them into a flexible cookbook, scaling ingredient quantities by servings, and using saved recipes in simple meal-planning loops.
+
+Visible app branding is now Comero. Legacy local storage keys, package id, and recipe-pack format may still use `lacucina` identifiers to preserve installed app data and import/export compatibility.
 
 The canonical product brief lives in [PROJECT.md](PROJECT.md). Work is tracked as PR-sized gaps in [GAP_ANALYSIS.md](GAP_ANALYSIS.md), with open product and technical decisions in [DECISIONS.md](DECISIONS.md).
 
@@ -30,6 +32,7 @@ Planning docs:
 - [Accessibility QA](docs/accessibility.md)
 - [Performance and resilience](docs/performance-resilience.md)
 - [Release readiness](docs/release.md)
+- [Google Play submission notes](docs/google-play-submission.md)
 - [Current implementation summary](docs/current-implementation-summary.md)
 - [Implementation feedback plan](docs/implementation-feedback-plan.md)
 - [Future platform guardrails](docs/future-platform-guardrails.md)

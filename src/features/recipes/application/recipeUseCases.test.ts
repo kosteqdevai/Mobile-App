@@ -100,6 +100,62 @@ describe("recipe use cases", () => {
     }
     expect(missing.error.code).toBe("not-found");
   });
+
+  it("archives, restores, and filters archived recipes", async () => {
+    const repository = new FakeRecipeRepository([recipe]);
+    const useCases = createRecipeUseCases(repository);
+
+    const archived = await useCases.archiveRecipe("recipe-1");
+    expect(archived.ok).toBe(true);
+    if (!archived.ok) {
+      throw new Error("Expected recipe to archive.");
+    }
+    expect(archived.value.archivedAt).toBeDefined();
+
+    const activeList = await useCases.listRecipes();
+    expect(activeList.ok).toBe(true);
+    if (!activeList.ok) {
+      throw new Error("Expected active list.");
+    }
+    expect(activeList.value).toEqual([]);
+
+    const archivedList = await useCases.listRecipes({ archivedOnly: true });
+    expect(archivedList.ok).toBe(true);
+    if (!archivedList.ok) {
+      throw new Error("Expected archived list.");
+    }
+    expect(archivedList.value.map((listedRecipe) => listedRecipe.id)).toEqual(["recipe-1"]);
+
+    const restored = await useCases.restoreRecipe("recipe-1");
+    expect(restored.ok).toBe(true);
+    if (!restored.ok) {
+      throw new Error("Expected recipe to restore.");
+    }
+    expect(restored.value.archivedAt).toBeUndefined();
+  });
+
+  it("archives and deletes selected recipes in bulk", async () => {
+    const secondRecipe: Recipe = { ...recipe, id: "recipe-2", title: "Soup" };
+    const repository = new FakeRecipeRepository([recipe, secondRecipe]);
+    const useCases = createRecipeUseCases(repository);
+
+    const archived = await useCases.archiveRecipes(["recipe-1", "recipe-2"]);
+    expect(archived.ok).toBe(true);
+    if (!archived.ok) {
+      throw new Error("Expected recipes to archive.");
+    }
+    expect(archived.value.every((listedRecipe) => listedRecipe.archivedAt)).toBe(true);
+
+    const deleted = await useCases.deleteRecipes(["recipe-1", "recipe-2"]);
+    expect(deleted.ok).toBe(true);
+
+    const list = await useCases.listRecipes({ includeArchived: true });
+    expect(list.ok).toBe(true);
+    if (!list.ok) {
+      throw new Error("Expected recipes list.");
+    }
+    expect(list.value).toEqual([]);
+  });
 });
 
 class FakeRecipeRepository implements RecipeRepository {

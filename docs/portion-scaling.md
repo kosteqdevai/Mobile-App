@@ -1,6 +1,6 @@
 # Portion Scaling
 
-LaCucina scales ingredient quantities dynamically from the saved base recipe.
+Comero scales ingredient quantities dynamically from the saved base recipe.
 
 ```text
 scaled quantity = original quantity * target servings / base servings

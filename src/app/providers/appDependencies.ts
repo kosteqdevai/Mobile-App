@@ -53,10 +53,17 @@ import {
   type RecipeExportUseCases,
   type RecipeSharePort,
 } from "../../features/recipes/application/recipeExportUseCases";
+import {
+  createMemoryRecipePackFilePort,
+  createRecipePackFileUseCases,
+  type RecipePackFileUseCases,
+  type RecipePackFilePort,
+} from "../../features/recipes/application/recipePackFileUseCases";
 import type { RecipeRepository } from "../../features/recipes/application/RecipeRepository";
 import { IndexedDbRecipeRepository } from "../../features/recipes/data/IndexedDbRecipeRepository";
 import { InMemoryRecipeRepository } from "../../features/recipes/data/InMemoryRecipeRepository";
 import { recipeToRecord } from "../../features/recipes/data/recipeMapper";
+import { WebRecipePackFilePort } from "../../features/recipes/data/WebRecipePackFilePort";
 import { WebRecipeSharePort } from "../../features/recipes/data/WebRecipeSharePort";
 import type { Recipe } from "../../features/recipes/domain/recipe";
 import { migrateLocalDataToSchemaV3 } from "./localDataMigration";
@@ -66,6 +73,7 @@ export type AppDependencies = {
   recipeUseCases: RecipeUseCases;
   recipeExportUseCases: RecipeExportUseCases;
   recipePackUseCases: RecipePackUseCases;
+  recipePackFileUseCases: RecipePackFileUseCases;
   cookSessionUseCases: CookSessionUseCases;
   cookbookUseCases: CookbookUseCases;
   mealPlanUseCases: MealPlanUseCases;
@@ -149,6 +157,7 @@ export function createDefaultAppDependencies(): AppDependencies {
     mealPlanRepository,
     recipeComponentRepository,
     createMemoryRecipeSharePort(),
+    createMemoryRecipePackFilePort(),
   );
 }
 
@@ -182,6 +191,7 @@ export function createBrowserAppDependencies(
     mealPlanRepository,
     recipeComponentRepository,
     new WebRecipeSharePort(window.navigator),
+    new WebRecipePackFilePort(window.navigator, window.document),
   );
 }
 
@@ -192,6 +202,7 @@ function createAppDependencies(
   mealPlanRepository: MealPlanRepository,
   recipeComponentRepository: RecipeComponentRepository,
   recipeSharePort: RecipeSharePort,
+  recipePackFilePort: RecipePackFilePort,
 ): AppDependencies {
   const recipeUseCases = createRecipeUseCases(recipeRepository);
 
@@ -200,6 +211,7 @@ function createAppDependencies(
     recipeUseCases,
     recipeExportUseCases: createRecipeExportUseCases(recipeUseCases, recipeSharePort),
     recipePackUseCases: createRecipePackUseCases(recipeUseCases),
+    recipePackFileUseCases: createRecipePackFileUseCases(recipePackFilePort),
     cookSessionUseCases: createCookSessionUseCases(cookSessionStore),
     cookbookUseCases: createCookbookUseCases(cookbookRepository),
     mealPlanUseCases: createMealPlanUseCases(mealPlanRepository, recipeRepository),

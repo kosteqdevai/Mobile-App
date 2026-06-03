@@ -78,7 +78,7 @@ export function createRecipePackUseCases(
 
   return {
     async exportRecipePack() {
-      const listResult = await recipeUseCases.listRecipes();
+      const listResult = await recipeUseCases.listRecipes({ includeArchived: true });
 
       if (!listResult.ok) {
         return err({
@@ -97,7 +97,7 @@ export function createRecipePackUseCases(
       };
 
       return ok({
-        fileName: `lacucina-recipes-${dateStamp(exportedAt)}.json`,
+        fileName: `comero-recipes-${dateStamp(exportedAt)}.json`,
         json: `${JSON.stringify(pack, null, 2)}\n`,
         recipeCount: listResult.value.length,
       });
@@ -149,6 +149,7 @@ export function createRecipePackUseCases(
             nutrition: recipeResult.value.nutrition,
             isFavorite: recipeResult.value.isFavorite,
             isTemplate: recipeResult.value.isTemplate,
+            archivedAt: recipeResult.value.archivedAt,
           },
           notices: importRecord.notices,
         });
@@ -194,7 +195,7 @@ export function createRecipePackUseCases(
     getAiPromptTemplate() {
       return [
         "Return only valid JSON. Do not wrap it in Markdown.",
-        "Create a LaCucina recipe pack using this structure:",
+        "Create a Comero recipe pack using this structure:",
         JSON.stringify(
           {
             format: RECIPE_PACK_FORMAT,
@@ -257,7 +258,7 @@ function parseRecipePack(jsonText: string): Result<ReadonlyArray<unknown>, Recip
   if (jsonText.trim().length === 0) {
     return err({
       code: "invalid-json",
-      message: "Paste or choose a LaCucina recipe pack first.",
+      message: "Paste or choose a Comero recipe pack first.",
     });
   }
 
@@ -287,14 +288,14 @@ function parseRecipePack(jsonText: string): Result<ReadonlyArray<unknown>, Recip
   if (typeof parsed.format === "string" && parsed.format !== RECIPE_PACK_FORMAT) {
     return err({
       code: "invalid-pack",
-      message: "This file is not a LaCucina recipe pack.",
+      message: "This file is not a Comero recipe pack.",
     });
   }
 
   if (typeof parsed.version === "number" && parsed.version > RECIPE_PACK_VERSION) {
     return err({
       code: "invalid-pack",
-      message: "This recipe pack was created by a newer LaCucina format.",
+      message: "This recipe pack was created by a newer Comero format.",
     });
   }
 
@@ -336,6 +337,7 @@ function recipeRecordToImport(
     nutrition: nutritionValue(source.nutrition),
     isFavorite: booleanValue(source.isFavorite),
     isTemplate: booleanValue(source.isTemplate),
+    archivedAt: stringValue(source.archivedAt) || undefined,
     createdAt: date,
     updatedAt: date,
   };

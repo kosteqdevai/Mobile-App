@@ -33,6 +33,15 @@ describe("recipe data contracts", () => {
     expect(recipeFromRecord(legacyRecord as Recipe).isTemplate).toBe(false);
   });
 
+  it("round trips archived recipes and keeps legacy recipes active", () => {
+    const archivedRecipe = { ...recipe, archivedAt: "2026-05-23T00:00:00.000Z" };
+
+    expect(recipeFromRecord(recipeToRecord(archivedRecipe)).archivedAt).toBe(
+      "2026-05-23T00:00:00.000Z",
+    );
+    expect(recipeFromRecord({ ...recipe, archivedAt: "" } as Recipe).archivedAt).toBeUndefined();
+  });
+
   it("stores recipes through the in-memory repository contract", async () => {
     const repository = new InMemoryRecipeRepository();
 

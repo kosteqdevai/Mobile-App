@@ -2,7 +2,7 @@ import type { CapacitorConfig } from "@capacitor/cli";
 
 const config: CapacitorConfig = {
   appId: "com.lacucina.app",
-  appName: "LaCucina",
+  appName: "Comero",
   webDir: "dist",
 };
 

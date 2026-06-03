@@ -1,10 +1,12 @@
-# PROJECT.md — LaCucina
+# PROJECT.md — Comero
+
+Branding note: the visible product name is Comero. Legacy local storage keys, Android package id, and recipe-pack format identifiers may still use `lacucina` for update-install and backup compatibility.
 
 ## One-line concept
 
-LaCucina to praktyczna, prosta i estetyczna aplikacja do przechowywania przepisów, organizowania własnego cookbooka, automatycznego przeliczania porcji oraz budowania elastycznych planów diety na podstawie zapisanych przepisów.
+Comero to praktyczna, prosta i estetyczna aplikacja do przechowywania przepisów, organizowania własnego cookbooka, automatycznego przeliczania porcji oraz budowania elastycznych planów diety na podstawie zapisanych przepisów.
 
-Długoterminowo LaCucina może rozwinąć się w system publikowania przepisów, cookbook twórcy, subskrypcję do cookbooka oraz marketplace recept, cookbooków lub planów żywieniowych.
+Długoterminowo Comero może rozwinąć się w system publikowania przepisów, cookbook twórcy, subskrypcję do cookbooka oraz marketplace recept, cookbooków lub planów żywieniowych.
 
 ## Current stage
 
@@ -48,20 +50,22 @@ Resolved planning decisions keep the MVP narrow:
 - No public recipe publishing in MVP.
 - Sharing, if included, is limited to text export or a native share sheet.
 - Recipe media is limited to one local photo per recipe.
-- Calories, macros, subscriptions, marketplace, social feed, creator profiles, and Freak Mode stay out of MVP.
+- Automatic nutrition calculation, clinical diet targets, subscriptions, marketplace, social feed, creator profiles, and Freak Mode stay out of MVP. Manual calorie/macro estimates and local planner targets are allowed when entered by the user.
 - Ownership, copyright, and moderation rules must be decided before any public publishing work starts.
 
 Detailed guardrails live in [docs/future-platform-guardrails.md](docs/future-platform-guardrails.md).
 
 ## Implementation feedback direction
 
-The latest implementation review recommends keeping LaCucina private and local-first while deepening practical kitchen workflows: richer recipe capture, grouped ingredients, cookable detail/export, guided cook mode, prep-ahead and leftovers guidance, weekly planning, shopping lists, and conservative allergen/nutrition metadata.
+The latest implementation review recommends keeping Comero private and local-first while deepening practical kitchen workflows: richer recipe capture, grouped ingredients, cookable detail/export, guided cook mode, prep-ahead and leftovers guidance, weekly planning, shopping lists, and conservative allergen/nutrition metadata.
 
 The next-build feedback plan lives in [docs/implementation-feedback-plan.md](docs/implementation-feedback-plan.md). It explicitly keeps public publishing, creator profiles, social feed, marketplace, subscriptions, backend sync, AI-first generation, and clinical diet advice out of the immediate scope.
 
-The consolidated product ideas in `LaCucina_skonsolidowane_pomysly.md` refine the next local-first build with template recipes, simpler allergen and macro entry, a mobile-friendly quantity field, and a wider US/practical ingredient unit list. These ideas remain private, local-only, and non-clinical: Base Recipes are normal cookbook recipes marked as templates and import as independent copies, allergen fields are user-entered checkboxes where checked means contains, macro fields are manual B/T/W plus optional calories, and US units are selectable labels without automatic conversion.
+The consolidated product ideas in `LaCucina_skonsolidowane_pomysly.md` refine the next local-first Comero build with template recipes, simpler allergen and macro entry, a mobile-friendly quantity field, and a wider US/practical ingredient unit list. These ideas remain private, local-only, and non-clinical: Base Recipes are normal cookbook recipes marked as templates and import as independent copies, allergen fields are user-entered checkboxes where checked means contains, macro fields are manual B/T/W plus optional calories, and US units are selectable labels without automatic conversion.
 
-Private recipe backup and bulk creation use a LaCucina Recipe Pack JSON file. The UI presents this as backup/import rather than asking casual users to edit JSON; AI-assisted users can copy a template prompt and import the generated pack after preview.
+The planner redesign replaces the old `Board` and `Templates` mental model with one flow: `Setup plan` -> choose `Weekly Mon-Sun`, `Custom loop`, or `Individual dates` -> use a week/month calendar -> open a day detail. A day detail tracks date-specific eaten checkboxes and one-date serving overrides, and shows both remaining-to-target and remaining planned uneaten calories/macros. Custom loops repeat a user-defined sequence from a start date.
+
+Private recipe backup and bulk creation use a Comero Recipe Pack JSON file. The UI presents this as backup/import rather than asking casual users to edit JSON; AI-assisted users can copy a template prompt and import the generated pack after preview.
 
 ## MVP implementation contract
 
@@ -75,7 +79,7 @@ Detailed MVP contracts:
 
 ## Product direction
 
-LaCucina ma obecnie dwa możliwe kierunki strategiczne:
+Comero ma obecnie dwa możliwe kierunki strategiczne:
 
 ### 1. Personal / creator cookbook
 
@@ -138,7 +142,7 @@ Założenia o użytkowniku:
 
 ## Core problems
 
-LaCucina ma rozwiązywać następujące problemy:
+Comero ma rozwiązywać następujące problemy:
 
 - przepisy są trudne do zapamiętania,
 - przepisy są rozproszone po notatkach, pamięci, screenshotach, social mediach albo dokumentach,
@@ -162,7 +166,7 @@ Aplikacja powinna pomagać w osiągnięciu tych efektów:
 
 ## Product style
 
-LaCucina powinna być:
+Comero powinna być:
 
 - praktyczna,
 - prosta,
@@ -184,7 +188,7 @@ dodaj przepis -> przypisz do cookbooka/kategorii -> przelicz porcje -> gotuj -> 
 Loop planowania diety:
 
 ```text
-wybierz przepisy -> przypisz do dnia/tygodnia/miesiąca/template'u -> ustaw porcje -> powtarzaj plan albo loop -> gotuj z planu
+setup plan -> wybierz weekly/custom loop/individual dates -> ustaw posiłki i cele dnia -> użyj kalendarza week/month -> odhacz zjedzone posiłki -> gotuj z planu
 ```
 
 Przyszły loop twórcy:
@@ -210,7 +214,7 @@ stwórz przepis -> dodaj zdjęcie/short -> opublikuj -> buduj cookbook -> share'
 
 ## MVP recommendation
 
-MVP powinno najpierw udowodnić, że LaCucina działa jako osobisty system do przepisów i planowania, zanim stanie się platformą do publikowania.
+MVP powinno najpierw udowodnić, że Comero działa jako osobisty system do przepisów i planowania, zanim stanie się platformą do publikowania.
 
 Rekomendowany pierwszy build:
 
@@ -231,10 +235,11 @@ Personal cookbook MVP z CRUD przepisów, kategoriami, automatycznym przeliczanie
 - Organizowanie przepisów w kategorie, zakładki albo cookbooki.
 - Wyszukiwanie lub filtrowanie przepisów po nazwie/kategorii.
 - Proste planowanie posiłków na podstawie zapisanych przepisów.
-- Minimum jeden prosty format planowania:
-  - plan tygodniowy,
-  - customowy template dnia,
-  - training day / non-training day.
+- Setup-driven planner with:
+  - `Weekly Mon-Sun`,
+  - `Custom loop` as a repeating day sequence from a start date,
+  - `Individual dates`.
+- Week/month calendar view and day detail with eaten checkboxes, one-date serving overrides, and manual calories/macros summaries when available.
 
 ## MVP should probably include
 
@@ -420,7 +425,7 @@ Docelowe typy planów:
 
 Ważne założenie:
 
-LaCucina nie powinna obsługiwać tylko kalendarzowego planowania. Powinna też obsługiwać template'y i powtarzalne pętle.
+Comero nie powinna obsługiwać tylko kalendarzowego planowania. Powinna też obsługiwać template'y i powtarzalne pętle.
 
 Przykład pętli:
 
@@ -541,7 +546,7 @@ Dodatkowe sygnały sukcesu:
 
 ## Open product questions
 
-- Czy LaCucina jest najpierw prywatnym cookbookiem, cookbookiem twórcy, czy otwartą platformą?
+- Czy Comero jest najpierw prywatnym cookbookiem, cookbookiem twórcy, czy otwartą platformą?
 - Czy MVP ma być web, mobile czy PWA?
 - Czy MVP wymaga kont użytkowników?
 - Czy przepisy mają być prywatne domyślnie?

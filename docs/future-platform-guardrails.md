@@ -1,6 +1,6 @@
 # Future Platform Guardrails
 
-LaCucina starts as a private personal cookbook. Public platform features stay out of the MVP unless a later decision explicitly changes that scope.
+Comero starts as a private personal cookbook. Public platform features stay out of the MVP unless a later decision explicitly changes that scope.
 
 ## Resolved MVP Boundaries
 
@@ -27,7 +27,7 @@ Any future publishing gap must define:
 
 ## Ownership and Copyright
 
-Ownership and copyright rules are deferred until public publishing is actively selected. Until then, LaCucina treats recipes as private user-managed content stored locally.
+Ownership and copyright rules are deferred until public publishing is actively selected. Until then, Comero treats recipes as private user-managed content stored locally.
 
 Before public content exists, the project needs a new decision or gap covering at least:
 

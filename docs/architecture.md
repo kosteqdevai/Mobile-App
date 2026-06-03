@@ -1,6 +1,6 @@
 # Architecture Contract
 
-LaCucina starts as a React + Vite + TypeScript web MVP optimized for smartphone-sized screens. Domain and application logic must stay portable so a later mobile app can reuse the core behavior.
+Comero starts as a React + Vite + TypeScript web MVP optimized for smartphone-sized screens. Domain and application logic must stay portable so a later mobile app can reuse the core behavior.
 
 ## Stack
 

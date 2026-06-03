@@ -1,10 +1,10 @@
-# LaCucina Current Implementation Summary
+# Comero Current Implementation Summary
 
-This document summarizes what is currently implemented in LaCucina so chefs, product collaborators, and software architects can review the MVP and suggest improvements.
+This document summarizes what is currently implemented in Comero so chefs, product collaborators, and software architects can review the MVP and suggest improvements.
 
 ## Short Product Summary
 
-LaCucina is currently a web-first MVP optimized for smartphone-sized screens. The goal is to validate a private personal cookbook loop before converting the strongest parts into a native mobile app.
+Comero is currently a web-first MVP optimized for smartphone-sized screens. The goal is to validate a private personal cookbook loop before converting the strongest parts into a native mobile app.
 
 Core loop implemented today:
 
@@ -19,9 +19,9 @@ Current product boundaries:
 - Local-only browser storage.
 - No backend sync.
 - No public recipe publishing.
-- No marketplace, subscriptions, creator profiles, calories, macros, social feed, or Freak Mode.
+- No marketplace, subscriptions, creator profiles, automatic nutrition calculation, clinical diet targets, social feed, or Freak Mode.
 - Sharing is limited to text export/native share or clipboard fallback.
-- Recipe transfer is handled through private LaCucina Recipe Pack JSON import/export with preview before saving.
+- Recipe transfer is handled through private Comero Recipe Pack JSON import/export with preview before saving.
 
 ## Implemented User Flows
 
@@ -31,9 +31,13 @@ Users can:
 
 - view saved recipes;
 - search recipes by title or tag;
+- filter recipes by cookbook, with the default cookbook showing all recipes;
 - filter to favorites;
+- show archived recipes on demand;
 - add a recipe;
 - edit a recipe;
+- archive and restore individual recipes;
+- select multiple recipes for bulk archive or bulk delete;
 - add, duplicate, remove, and reorder multiple ingredient rows;
 - add, duplicate, remove, and reorder multiple preparation steps;
 - capture ingredient group labels and prep notes;
@@ -43,7 +47,8 @@ Users can:
 - change target servings and see scaled ingredients;
 - distinguish scaled quantity from original/base quantity;
 - export/share a private text version of a recipe.
-- export all recipes to a private LaCucina Recipe Pack JSON backup;
+- export all recipes to a private Comero Recipe Pack JSON backup;
+- on Android, open native save/share options for the generated backup file because WebView blob downloads are unreliable;
 - paste or select a recipe pack, preview valid/invalid recipes, and import valid recipes as new private copies;
 - copy an AI prompt/template for bulk recipe pack generation.
 
@@ -54,6 +59,7 @@ Current recipe form supports dynamic ingredient and step collections. The domain
 Users can:
 
 - view available cookbooks;
+- create additional local cookbooks with a starter `General` category;
 - view nested categories;
 - create a root category;
 - rename a selected category;
@@ -61,21 +67,24 @@ Users can:
 - assign saved recipes to a selected category;
 - remove assigned recipes from a selected category.
 
-The domain model supports nested category trees. The current UI exposes category selection and management, but does not yet provide drag-and-drop ordering or advanced category editing.
+The domain model supports nested category trees. Recipe assignments are additive, so one recipe can appear in more than one cookbook/category without duplicating the recipe record. The current UI exposes category selection and management, but does not yet provide drag-and-drop ordering or advanced category editing.
 
 ### Meal Planner
 
 Users can:
 
 - view the current meal plan;
-- plan on a flexible board with `weekly`, `rolling7`, `month`, or `customLoop` presets;
-- optionally set a local `YYYY-MM-DD` board start date;
-- configure board slot templates and custom loop day labels;
-- add saved recipes to board days with servings, slot template, custom slot, or no slot;
-- mark planned board entries as `cook`, `eat`, or `prep`;
-- update servings, move board entries between days/slots, and remove board entries;
-- switch to reusable `Templates` mode for the original training/non-training loop;
-- add loop days, add saved recipes to loop templates, update servings, move entries, and remove entries;
+- configure one setup-driven planner instead of separate `Board` and `Templates` modes;
+- choose `Weekly Mon-Sun`, `Custom loop`, or `Individual dates`;
+- set a local `YYYY-MM-DD` start date for sequence-based custom loops;
+- add saved recipes to day definitions with servings, optional meal label, and `cook`/`eat`/`prep` context;
+- set optional manual day targets for calories, protein, fat, and carbs;
+- switch between week and month calendar views;
+- open a concrete date detail from the calendar;
+- mark meal occurrences as eaten for that actual date;
+- override servings for one actual date without mutating the recurring day definition;
+- see target, planned, eaten, left-to-target, and planned-left summaries when recipes have manual nutrition;
+- open the planned recipe/cook-mode handoff from a day detail;
 - see empty-day, loading, error, and per-action error states.
 
 The seed plan includes:
@@ -721,16 +730,11 @@ Location: `src/features/planner/domain/mealPlan.ts`
 - `id: string`
 - `name: string`
 - `loopDays: ReadonlyArray<LoopDay>`
-- `board?: PlannerBoard`
+- `board?: PlannerBoard` for compatibility with closed board gaps and old local data.
+- `schedule?: MealPlanSchedule`
+- `dateStates?: ReadonlyArray<MealPlanDateState>`
 - `createdAt: string`
 - `updatedAt: string`
-
-`PlannerBoardPreset`
-
-- `weekly`
-- `rolling7`
-- `month`
-- `customLoop`
 
 `PlannedMealEntryContext`
 
@@ -738,35 +742,43 @@ Location: `src/features/planner/domain/mealPlan.ts`
 - `eat`
 - `prep`
 
-`PlannerSlotTemplate`
+`MealPlanScheduleMode`
 
-- `id: string`
-- `label: string`
+- `weekly`
+- `customLoop`
+- `individualDates`
 
-`PlannerBoardEntry`
+`PlannerNutritionTargets`
+
+- optional `calories`, `protein`, `fat`, and `carbs` numbers.
+
+`MealPlanScheduledEntry`
 
 - `id: string`
 - `recipeId: string`
 - `servings: number`
-- `slotId?: string`
-- `customSlotLabel?: string`
+- `label?: string`
 - `context?: PlannedMealEntryContext`
 
-`PlannerDayBucket`
+`MealPlanDayDefinition`
 
 - `id: string`
 - `label: string`
-- `date?: string`
-- `entries: ReadonlyArray<PlannerBoardEntry>`
+- `targets?: PlannerNutritionTargets`
+- `entries: ReadonlyArray<MealPlanScheduledEntry>`
 
-`PlannerBoard`
+`MealPlanSchedule`
 
-- `preset: PlannerBoardPreset`
-- `startDate?: string`
-- `slotTemplates: ReadonlyArray<PlannerSlotTemplate>`
-- `days: ReadonlyArray<PlannerDayBucket>`
+- weekly: `mode: "weekly"`, optional `startDate`, seven day definitions.
+- custom loop: `mode: "customLoop"`, required `startDate`, ordered day sequence.
+- individual dates: `mode: "individualDates"`, date-specific day definitions.
 
-Default board slots are `Breakfast`, `Lunch`, `Dinner`, and `Snack`.
+`MealPlanDateState`
+
+- `date: string`
+- `entries: ReadonlyArray<{ entryId: string; eaten?: boolean; servingsOverride?: number }>`
+
+Legacy `board` and `loopDays` records map forward into `schedule` during normalization without deleting the old fields.
 
 ### Validation Errors
 
@@ -792,41 +804,50 @@ Default board slots are `Breakfast`, `Lunch`, `Dinner`, and `Snack`.
 - `board-slot-not-found`
 - `board-entry-not-found`
 - `board-context-invalid`
+- `schedule-mode-invalid`
+- `schedule-date-invalid`
+- `schedule-day-id-required`
+- `schedule-day-label-required`
+- `schedule-day-not-found`
+- `schedule-entry-not-found`
+- `schedule-target-invalid`
 
 ### Functions
 
 - `createMealPlan(input)`
-  - validates plan, loop days, board, entries, dates, IDs, slots, context, and servings.
+  - validates plan, loop days, board compatibility, schedule entries, dates, targets, IDs, context, and servings.
 - `normalizeMealPlan(input)`
-  - returns a fully normalized plan and maps legacy loop-only plans into a compatible `customLoop` board.
-- `configurePlannerBoard(plan, input)`
-  - builds or replaces the board from a preset, optional local start date, optional custom day labels, and optional slot templates.
+  - returns a fully normalized plan and maps legacy loop-only/board records into a compatible schedule.
+- `configureMealPlanSchedule(plan, input)`
+  - builds or replaces the calendar-resolved schedule for weekly, custom-loop, or individual-date modes.
 - `addLoopDay(plan, input)`
   - adds a loop day with preset and empty entries.
 - `addMealPlanEntry(plan, dayId, input)`
   - adds recipe entry to a day.
-- `addPlannerBoardEntry(plan, dayId, input)`
-  - adds a recipe entry to a board bucket with template slot, custom slot, no slot, and optional context.
+- `addMealPlanScheduleEntry(plan, dayId, input)`
+  - adds a saved recipe entry to one schedule day definition.
 - `changeMealPlanEntryServings(plan, entryId, servings)`
   - updates servings for one planned entry.
-- `changePlannerBoardEntryServings(plan, entryId, servings)`
-  - updates servings for one board entry.
+- `changeMealPlanScheduleEntryServings(plan, entryId, servings)`
+  - updates servings for one schedule definition entry.
 - `removeMealPlanEntry(plan, entryId)`
   - removes one planned entry.
-- `removePlannerBoardEntry(plan, entryId)`
-  - removes one board entry.
+- `removeMealPlanScheduleEntry(plan, entryId)`
+  - removes one schedule definition entry.
 - `moveMealPlanEntry(plan, entryId, targetDayId)`
   - moves a planned entry to another loop day.
-- `movePlannerBoardEntry(plan, entryId, input)`
-  - moves a board entry to another day and slot/custom slot/no slot.
 - `findLoopDay(plan, dayId)`
   - finds one loop day.
-- `findPlannerBoardDay(plan, dayId)`
-  - finds one board bucket.
 - `getEmptyLoopDays(plan)`
   - returns loop days with no planned entries.
-- `getEmptyPlannerBoardDays(plan)`
-  - returns board buckets with no board entries.
+- `setMealPlanDateEntryEaten(plan, date, entryId, eaten)`
+  - stores an eaten checkbox for one meal occurrence on one actual date.
+- `setMealPlanDateEntryServings(plan, date, entryId, servings)`
+  - stores a servings override for one meal occurrence on one actual date.
+- `resolveMealPlanCalendarDay(plan, recipes, date)`
+  - resolves the schedule into concrete meals plus planned/eaten/left summaries for that date.
+- `resolveMealPlanCalendarRange(plan, recipes, startDate, dayCount)`
+  - resolves a week or month range into day summaries.
 
 ## Meal Planner Application Use Cases
 
@@ -843,9 +864,19 @@ Use cases:
 - `createPlan(input)`
 - `loadPlan(planId)`
 - `listPlans()`
+- `configureSchedule(planId, input)`
+- `updateScheduleDayTargets(planId, dayId, targets)`
+- `addScheduleEntry(planId, dayId, input)`
+  - verifies referenced recipe exists before adding to a schedule day.
+- `changeScheduleEntryServings(planId, entryId, servings)`
+- `removeScheduleEntry(planId, entryId)`
+- `setDateEntryEaten(planId, date, entryId, eaten)`
+- `setDateEntryServings(planId, date, entryId, servings)`
+- `resolveCalendarDay(planId, date)`
+- `resolveCalendarRange(planId, startDate, dayCount)`
 - `configureBoard(planId, input)`
+  - retained for compatibility with closed board work and legacy tests.
 - `addBoardEntry(planId, dayId, input)`
-  - verifies referenced recipe exists before adding to the board.
 - `changeBoardEntryServings(planId, entryId, servings)`
 - `moveBoardEntry(planId, entryId, input)`
 - `removeBoardEntry(planId, entryId)`
@@ -1114,6 +1145,7 @@ Props:
 
 - `mealPlanUseCases`
 - `recipeUseCases`
+- `onOpenRecipe`
 - `onChanged`
 
 States:
@@ -1123,26 +1155,25 @@ States:
 - no meal plan;
 - ready;
 - per-action errors;
-- empty board/template day.
+- empty calendar day.
 
 UI features:
 
 - plan selector;
-- `Board` and `Templates` tabs;
-- board preset selector for `weekly`, `rolling7`, `month`, and `customLoop`;
-- optional board start date input;
-- board slot template configuration;
-- custom loop day label configuration;
-- mobile day cards rendered as a list/grid, including the month preset as day groups rather than a desktop calendar;
-- add saved recipe to a board day;
-- choose servings, slot template/custom slot/no slot, and `cook`/`eat`/`prep` context for a new board entry;
-- update board entry servings;
-- move board entries with target day and target slot selects plus a `Move` button;
-- remove board entries;
-- add loop template days;
-- add saved recipes to loop template days;
-- update, move, and remove template entries;
-- show planned nutrition summaries when a recipe has manual estimates.
+- `Setup plan` panel;
+- setup mode selector for `Weekly Mon-Sun`, `Custom loop`, and `Individual dates`;
+- local start date input for sequence-based schedules;
+- custom loop day labels and individual date list inputs;
+- per-day target inputs for calories, protein, fat, and carbs;
+- add saved recipes to setup day definitions with servings, optional meal label, and context;
+- update or remove setup entries;
+- week/month calendar toggle;
+- calendar day buttons with planned/eaten summaries;
+- day detail with target, planned, eaten, left-to-target, and planned-left cards;
+- meal rows as collapsible detail sections;
+- eaten checkbox per actual date;
+- date-specific servings override;
+- cook-mode handoff with the date-specific serving count.
 
 ## Shared UI Components
 
@@ -1184,8 +1215,8 @@ This runs:
 
 Latest known passing state:
 
-- 29 test files.
-- 89 tests.
+- 37 test files.
+- 140 tests.
 - Production build passes.
 
 Coverage includes:
@@ -1193,7 +1224,7 @@ Coverage includes:
 - domain validation;
 - portion scaling;
 - cookbook/category lifecycle;
-- planner lifecycle, flexible board presets, slots, moves, and legacy normalization;
+- planner lifecycle, weekly/custom-loop/individual-date schedules, calendar summaries, date-specific eaten/serving state, and legacy normalization;
 - repository persistence across restart;
 - corrupted local records;
 - route navigation;
@@ -1206,8 +1237,8 @@ Coverage includes:
   - create recipe;
   - find recipe;
   - scale servings;
-  - add recipe to planner board;
-  - move planned board entry;
+  - add recipe through planner setup;
+  - track a calendar-day meal with eaten state and serving override;
   - reopen persisted data.
 
 ## Current Limitations

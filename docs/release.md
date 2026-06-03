@@ -80,3 +80,5 @@ No analytics, tracking, account credentials, payments, location, health data, or
 ## Store and Mobile Conversion Notes
 
 Native iOS/Android production signing, app-store metadata, final app icon, splash screen, and store privacy forms are deferred until the mobile conversion phase. Those steps require platform accounts and signing materials that must stay out of the repository.
+
+Google Play Console paste-ready listing, privacy, Data Safety, and review notes are collected in [Google Play Submission Notes](google-play-submission.md).

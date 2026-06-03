@@ -3,9 +3,11 @@ import { describe, expect, it } from "vitest";
 import {
   addLoopDay,
   addMealPlanEntry,
+  addMealPlanScheduleEntry,
   addPlannerBoardEntry,
   changeMealPlanEntryServings,
   changePlannerBoardEntryServings,
+  configureMealPlanSchedule,
   configurePlannerBoard,
   createMealPlan,
   getEmptyLoopDays,
@@ -14,6 +16,10 @@ import {
   movePlannerBoardEntry,
   removeMealPlanEntry,
   removePlannerBoardEntry,
+  resolveMealPlanCalendarDay,
+  setMealPlanDateEntryEaten,
+  setMealPlanDateEntryServings,
+  updateMealPlanDayTargets,
   type MealPlan,
 } from "./mealPlan";
 
@@ -312,5 +318,155 @@ describe("meal plan domain", () => {
       throw new Error("Expected invalid move.");
     }
     expect(invalidMove.error.code).toBe("board-entry-not-found");
+  });
+
+  it("configures weekly schedules and resolves day macro summaries", () => {
+    const configured = configureMealPlanSchedule(basePlan, {
+      mode: "weekly",
+      startDate: "2026-05-25",
+    });
+
+    expect(configured.ok).toBe(true);
+    if (!configured.ok) {
+      throw new Error("Expected weekly schedule.");
+    }
+
+    const withTargets = updateMealPlanDayTargets(configured.value, "schedule-day-monday-1", {
+      calories: 1000,
+      protein: 80,
+    });
+    expect(withTargets.ok).toBe(true);
+    if (!withTargets.ok) {
+      throw new Error("Expected target update.");
+    }
+
+    const withEntry = addMealPlanScheduleEntry(withTargets.value, "schedule-day-monday-1", {
+      id: "schedule-entry-1",
+      recipeId: "recipe-1",
+      servings: 2,
+      slotLabel: "Lunch",
+      context: "eat",
+    });
+    expect(withEntry.ok).toBe(true);
+    if (!withEntry.ok) {
+      throw new Error("Expected schedule entry.");
+    }
+
+    const summary = resolveMealPlanCalendarDay(
+      withEntry.value,
+      [
+        {
+          id: "recipe-1",
+          title: "Lemon pasta",
+          baseServings: 2,
+          nutrition: {
+            calories: { amount: 500, unit: "kcal" },
+            protein: { amount: 30, unit: "g" },
+          },
+        },
+      ],
+      "2026-05-25",
+    );
+
+    expect(summary.label).toBe("Monday");
+    expect(summary.entries[0]).toMatchObject({
+      id: "schedule-entry-1",
+      effectiveServings: 2,
+      eaten: false,
+    });
+    expect(summary.plannedTotals.calories).toBe(500);
+    expect(summary.leftToTarget.calories).toBe(1000);
+    expect(summary.plannedLeft.calories).toBe(500);
+  });
+
+  it("tracks eaten state and serving overrides per actual date", () => {
+    const configured = configureMealPlanSchedule(basePlan, {
+      mode: "customLoop",
+      startDate: "2026-05-22",
+      dayLabels: ["Training Day", "Rest Day"],
+    });
+    expect(configured.ok).toBe(true);
+    if (!configured.ok) {
+      throw new Error("Expected custom loop schedule.");
+    }
+
+    const withEntry = addMealPlanScheduleEntry(configured.value, "schedule-day-training-day-1", {
+      id: "schedule-entry-1",
+      recipeId: "recipe-1",
+      servings: 2,
+    });
+    expect(withEntry.ok).toBe(true);
+    if (!withEntry.ok) {
+      throw new Error("Expected schedule entry.");
+    }
+
+    const withServings = setMealPlanDateEntryServings(
+      withEntry.value,
+      "2026-05-22",
+      "schedule-entry-1",
+      4,
+    );
+    expect(withServings.ok).toBe(true);
+    if (!withServings.ok) {
+      throw new Error("Expected date serving override.");
+    }
+
+    const eaten = setMealPlanDateEntryEaten(
+      withServings.value,
+      "2026-05-22",
+      "schedule-entry-1",
+      true,
+    );
+    expect(eaten.ok).toBe(true);
+    if (!eaten.ok) {
+      throw new Error("Expected eaten state.");
+    }
+
+    const recipe = {
+      id: "recipe-1",
+      baseServings: 2,
+      nutrition: { calories: { amount: 400, unit: "kcal" } },
+    };
+    const firstDay = resolveMealPlanCalendarDay(eaten.value, [recipe], "2026-05-22");
+    const nextTrainingDay = resolveMealPlanCalendarDay(eaten.value, [recipe], "2026-05-24");
+
+    expect(firstDay.entries[0]).toMatchObject({ effectiveServings: 4, eaten: true });
+    expect(firstDay.eatenTotals.calories).toBe(800);
+    expect(firstDay.plannedLeft.calories).toBe(0);
+    expect(nextTrainingDay.entries[0]).toMatchObject({ effectiveServings: 2, eaten: false });
+    expect(nextTrainingDay.plannedTotals.calories).toBe(400);
+  });
+
+  it("maps dated board days into individual date schedules", () => {
+    const configured = configurePlannerBoard(basePlan, {
+      preset: "month",
+      startDate: "2026-06-01",
+    });
+    expect(configured.ok).toBe(true);
+    if (!configured.ok) {
+      throw new Error("Expected board configuration.");
+    }
+
+    const withEntry = addPlannerBoardEntry(configured.value, "board-day-day-1-1", {
+      id: "board-entry-1",
+      recipeId: "recipe-1",
+      servings: 1,
+    });
+    expect(withEntry.ok).toBe(true);
+    if (!withEntry.ok) {
+      throw new Error("Expected board entry.");
+    }
+
+    const normalized = createMealPlan({ ...withEntry.value, schedule: undefined });
+    expect(normalized.ok).toBe(true);
+    if (!normalized.ok) {
+      throw new Error("Expected normalization.");
+    }
+
+    expect(normalized.value.schedule?.mode).toBe("individualDates");
+    expect(normalized.value.schedule?.days[0]).toMatchObject({
+      date: "2026-06-01",
+      entries: [{ id: "board-entry-1" }],
+    });
   });
 });

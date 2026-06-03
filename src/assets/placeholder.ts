@@ -1,1 +1,1 @@
-export const placeholderAssetNotice = "Placeholder asset slot for the LaCucina web scaffold.";
+export const placeholderAssetNotice = "Placeholder asset slot for the Comero web scaffold.";

@@ -9,6 +9,8 @@ export type RecipeFilters = {
   categoryPath?: ReadonlyArray<string>;
   tag?: string;
   favoriteOnly?: boolean;
+  includeArchived?: boolean;
+  archivedOnly?: boolean;
 };
 
 export type RecipeUseCaseErrorCode = "validation" | "not-found" | "repository";
@@ -23,6 +25,12 @@ export type RecipeUseCases = {
   createRecipe(input: RecipeInput): Promise<Result<Recipe, RecipeUseCaseError>>;
   updateRecipe(input: RecipeInput): Promise<Result<Recipe, RecipeUseCaseError>>;
   deleteRecipe(recipeId: string): Promise<Result<void, RecipeUseCaseError>>;
+  deleteRecipes(recipeIds: ReadonlyArray<string>): Promise<Result<void, RecipeUseCaseError>>;
+  archiveRecipe(recipeId: string): Promise<Result<Recipe, RecipeUseCaseError>>;
+  archiveRecipes(
+    recipeIds: ReadonlyArray<string>,
+  ): Promise<Result<ReadonlyArray<Recipe>, RecipeUseCaseError>>;
+  restoreRecipe(recipeId: string): Promise<Result<Recipe, RecipeUseCaseError>>;
   getRecipeDetails(recipeId: string): Promise<Result<Recipe, RecipeUseCaseError>>;
   listRecipes(filters?: RecipeFilters): Promise<Result<ReadonlyArray<Recipe>, RecipeUseCaseError>>;
   previewPortions(
@@ -98,6 +106,90 @@ export function createRecipeUseCases(repository: RecipeRepository): RecipeUseCas
       }
     },
 
+    async deleteRecipes(recipeIds) {
+      try {
+        const recipesResult = await getExistingRecipes(repository, recipeIds);
+
+        if (!recipesResult.ok) {
+          return err(recipesResult.error);
+        }
+
+        await Promise.all(recipesResult.value.map((recipe) => repository.delete(recipe.id)));
+        return ok(undefined);
+      } catch (error) {
+        return err(repositoryError(error));
+      }
+    },
+
+    async archiveRecipe(recipeId) {
+      try {
+        const existing = await repository.getById(recipeId);
+
+        if (!existing) {
+          return err({
+            code: "not-found",
+            message: "Recipe was not found.",
+          });
+        }
+
+        const archived = {
+          ...existing,
+          archivedAt: existing.archivedAt ?? new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        await repository.save(archived);
+        return ok(archived);
+      } catch (error) {
+        return err(repositoryError(error));
+      }
+    },
+
+    async archiveRecipes(recipeIds) {
+      try {
+        const recipesResult = await getExistingRecipes(repository, recipeIds);
+
+        if (!recipesResult.ok) {
+          return err(recipesResult.error);
+        }
+
+        const now = new Date().toISOString();
+        const archivedRecipes = recipesResult.value.map((recipe) => ({
+          ...recipe,
+          archivedAt: recipe.archivedAt ?? now,
+          updatedAt: now,
+        }));
+
+        await Promise.all(archivedRecipes.map((recipe) => repository.save(recipe)));
+        return ok(archivedRecipes);
+      } catch (error) {
+        return err(repositoryError(error));
+      }
+    },
+
+    async restoreRecipe(recipeId) {
+      try {
+        const existing = await repository.getById(recipeId);
+
+        if (!existing) {
+          return err({
+            code: "not-found",
+            message: "Recipe was not found.",
+          });
+        }
+
+        const restoredRecipe = { ...existing };
+        delete restoredRecipe.archivedAt;
+        const restored = {
+          ...restoredRecipe,
+          updatedAt: new Date().toISOString(),
+        };
+        await repository.save(restored);
+        return ok(restored);
+      } catch (error) {
+        return err(repositoryError(error));
+      }
+    },
+
     async getRecipeDetails(recipeId) {
       try {
         const recipe = await repository.getById(recipeId);
@@ -164,6 +256,15 @@ function repositoryError(error: unknown): RecipeUseCaseError {
 function filterRecipes(recipes: ReadonlyArray<Recipe>, filters: RecipeFilters) {
   return recipes.filter((recipe) => {
     const searchTerm = filters.searchTerm?.trim().toLowerCase();
+    const isArchived = Boolean(recipe.archivedAt);
+
+    if (filters.archivedOnly && !isArchived) {
+      return false;
+    }
+
+    if (!filters.archivedOnly && !filters.includeArchived && isArchived) {
+      return false;
+    }
 
     if (
       searchTerm &&
@@ -195,4 +296,34 @@ function filterRecipes(recipes: ReadonlyArray<Recipe>, filters: RecipeFilters) {
 
 function matchesCategoryPath(recipePath: ReadonlyArray<string>, filterPath: ReadonlyArray<string>) {
   return filterPath.every((segment, index) => recipePath[index] === segment);
+}
+
+async function getExistingRecipes(
+  repository: RecipeRepository,
+  recipeIds: ReadonlyArray<string>,
+): Promise<Result<ReadonlyArray<Recipe>, RecipeUseCaseError>> {
+  const normalizedRecipeIds = Array.from(
+    new Set(recipeIds.map((recipeId) => recipeId.trim()).filter((recipeId) => recipeId.length > 0)),
+  );
+
+  if (normalizedRecipeIds.length === 0) {
+    return err({
+      code: "validation",
+      message: "At least one recipe must be selected.",
+    });
+  }
+
+  const recipes = await Promise.all(
+    normalizedRecipeIds.map((recipeId) => repository.getById(recipeId)),
+  );
+  const missingRecipeId = normalizedRecipeIds.find((_, index) => !recipes[index]);
+
+  if (missingRecipeId) {
+    return err({
+      code: "not-found",
+      message: `Recipe ${missingRecipeId} was not found.`,
+    });
+  }
+
+  return ok(recipes.filter((recipe): recipe is Recipe => Boolean(recipe)));
 }

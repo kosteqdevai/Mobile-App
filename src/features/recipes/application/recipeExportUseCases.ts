@@ -110,7 +110,7 @@ function formatRecipeExport(
     lines.push("User-entered guidance. Review freshness and safety before serving.");
   }
 
-  lines.push("", "Private LaCucina text export. No public publishing link was created.");
+  lines.push("", "Private Comero text export. No public publishing link was created.");
 
   return lines.join("\n");
 }

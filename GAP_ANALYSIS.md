@@ -807,3 +807,224 @@ tests: Unit tests for to-taste normalization and string dietary tags; component 
 closes_when: The provided AI-generated recipe pack previews without ingredient quantity/unit failures and the Backup UI no longer resets preview status when navigating away and back.
 escalate_if: Import must guess arbitrary missing quantities, perform automatic unit conversion, merge/overwrite existing recipes, or import binary media.
 do_not: Do not add CSV/XLSX parsing, backend sync, public sharing, automatic nutrition calculation, or allergy-safety claims.
+
+## GAP-063 — Fix AI prompt copy fallback
+phase: 4
+status: closed
+type: ui
+blocked_by: GAP-061
+goal: Make the AI recipe pack prompt copy button work reliably in mobile browser and webview contexts.
+scope: RecipeTransferScreen copy behavior and component tests.
+acceptance_criteria: Copy prompt first uses the Clipboard API, falls back to legacy selection copy when Clipboard API rejects, shows success when either copy path works, and selects the visible prompt with an accessible status message when copying is unavailable.
+tests: Component tests for Clipboard API success, Clipboard API rejection with legacy copy, and unavailable clipboard fallback.
+closes_when: Users can click Copy prompt and either get a copied prompt or a selected prompt ready for manual copying.
+escalate_if: Native Android clipboard integration or platform permissions become required.
+do_not: Do not add backend sync, external services, or native plugin dependencies.
+
+## GAP-064 — Fix recipe pack download link
+phase: 4
+status: closed
+type: ui
+blocked_by: GAP-061
+goal: Make exported recipe packs download through a real user-clickable file link.
+scope: RecipeTransferScreen export download behavior, button/link styling, component tests.
+acceptance_criteria: Exported packs create a stable Blob URL for the generated result; Download file renders as an anchor with href and download filename; Blob URLs are revoked when replaced or when the screen unmounts; the JSON textarea fallback remains visible.
+tests: Component test for generated download link attributes and Blob URL cleanup; focused RecipeTransferScreen test; full quality check.
+closes_when: Users can click Download file after export and the browser receives a normal downloadable link.
+escalate_if: Native Android file-system saving, storage permissions, or app-store release download behavior is required.
+do_not: Do not add backend sync, cloud storage, native file plugins, or overwrite/import semantics.
+
+## GAP-065 — Keep recipe pack export current
+phase: 4
+status: closed
+type: ui
+blocked_by: GAP-061
+goal: Prevent stale recipe pack exports from being downloaded after recipes change.
+scope: App route state, RecipeTransferScreen download fallback, integration/component tests.
+acceptance_criteria: Saving, deleting, importing, or reorganizing recipes clears any previously generated export result; returning to Backup cannot silently download an old recipe pack; exporting after adding a recipe reads the current persisted recipe list; a ready export restored from controlled state still has a downloadable fallback link.
+tests: Component test for remounted ready export download fallback; integration test for export default, add recipe, export current recipe list; focused Backup/MVP flow tests; full quality check.
+closes_when: Downloaded recipe packs reflect the current cookbook after user changes instead of an older default-only export.
+escalate_if: Multi-device sync, export history, or conflict resolution is required.
+do_not: Do not add backend sync, cloud backup, native file plugins, or automatic merging.
+
+## GAP-066 — Add quick recipe entry mode
+phase: 3
+status: closed
+type: ui
+blocked_by: GAP-060
+goal: Make adding a normal recipe feel fast by showing only essential fields first.
+scope: Recipe form presentation, mobile layout styles, component tests.
+acceptance_criteria: Create mode shows title, base servings, ingredients, steps, and save without requiring users to pass through optional metadata; template import, category, notes, guidance, allergens, nutrition, favorite, template flag, and photo reference remain available inside one collapsed advanced section; edit mode keeps advanced options available and opens them when existing metadata is being edited; validation and existing save behavior remain unchanged.
+tests: Component tests for collapsed create mode, opening advanced options, quick valid submit, and edit metadata visibility.
+closes_when: A user can create a basic recipe without scrolling through optional setup fields.
+escalate_if: Quick add requires changing recipe domain validation or adding AI/clipboard parsing.
+do_not: Do not remove advanced fields, weaken validation, or create a separate recipe type.
+
+## GAP-067 — Generate shopping list from saved cooking plans
+phase: 2
+status: open
+type: application
+blocked_by: GAP-018, GAP-036
+goal: Turn selected planner entries and recipes into a practical grocery checklist.
+scope: Shopping-list domain/application layer, recipe/planner read use cases, unit tests.
+acceptance_criteria: A shopping list can be built from selected recipes or planner entries; items preserve recipe source labels; identical ingredient name and unit combinations are grouped by addition only when units match exactly; manual checklist items can be added and checked; no automatic unit conversion is performed.
+tests: Unit tests for recipe aggregation, planner aggregation, source labels, manual items, checked state, and unmatched unit preservation.
+closes_when: Shopping list behavior is testable without UI, storage, or a real device.
+escalate_if: Metric/US conversion, pantry inventory, barcode scanning, or external grocery APIs are required.
+do_not: Do not add external services, automatic unit conversion, or platform permissions.
+
+## GAP-068 — Build mobile cook mode workspace
+phase: 3
+status: open
+type: ui
+blocked_by: GAP-023, GAP-066
+goal: Make cook mode usable as a phone-first kitchen workspace.
+scope: Recipe detail cook mode presentation, cook session state, component tests, styles.
+acceptance_criteria: Cook mode shows one large current step, progress, completion control, next/previous controls, relevant ingredient groups, and an exit path; long recipes remain scannable on small screens; progress persists through the existing cook session use cases; no notification or native timer permission is introduced.
+tests: Component tests for step navigation, completion persistence, ingredient visibility, exit behavior, and small-screen-safe content.
+closes_when: Users can cook from a phone without returning to the full recipe detail for each step.
+escalate_if: Native timers, push notifications, voice control, or device sensors are required.
+do_not: Do not add native permissions, background tasks, or automatic doneness advice.
+
+## GAP-069 — Add backup confidence dashboard
+phase: 4
+status: open
+type: ui
+blocked_by: GAP-061, GAP-065
+goal: Give users confidence that local recipes can be backed up and restored before app updates or phone installs.
+scope: Backup screen, recipe pack export/import state, integration/component tests, docs/import-export.md.
+acceptance_criteria: Backup screen summarizes current local recipe count, last generated backup file state, and clear next actions for export/import; import success tells users to re-export after adding new recipes; empty/default-only states are explicit; no backend sync is implied.
+tests: Component tests for empty, populated, exported, and imported states; integration test that recipe count updates after save/import.
+closes_when: Users can tell whether they need to export before reinstalling or moving to a phone.
+escalate_if: Automatic cloud sync, account recovery, encryption, or native file-system backup becomes required.
+do_not: Do not add backend sync, cloud storage, native file plugins, or claims that data survives uninstall.
+
+## GAP-070 — Persist local recipe photos
+phase: 4
+status: open
+type: data
+blocked_by: GAP-046, GAP-066
+goal: Store one local recipe photo as app-owned local data instead of a text-only reference.
+scope: Recipe photo data adapter, IndexedDB schema, recipe form/detail/list UI, mapper/repository/component tests.
+acceptance_criteria: Users can choose one local image for a recipe; the image is stored locally and survives reload; list/detail show a thumbnail or fallback; deleting/changing a photo cleans up old local photo data; export/import documents that binary photos are not included unless a later gap adds media backup.
+tests: Mapper tests, repository persistence tests, component tests for choose/change/remove photo and fallback rendering.
+closes_when: A recipe can display its own locally stored photo without backend storage.
+escalate_if: Camera capture, gallery permissions, cloud media, video, or photo backup/export is required.
+do_not: Do not add public media hosting, native camera plugins, binary recipe-pack export, or real user photo fixtures.
+
+## GAP-071 — Redefine planner as setup plus calendar
+phase: 0
+status: closed
+type: product
+blocked_by: none
+goal: Replace the board/templates planner concept with a setup-driven calendar planner roadmap.
+scope: PROJECT.md, docs/mvp-scope.md, docs/current-implementation-summary.md, GAP_ANALYSIS.md.
+acceptance_criteria: Planner direction documents three setup modes, sequence-based custom loop, week/month calendar views, day detail, eaten state, serving overrides, and macro remaining behavior.
+tests: Manual docs review.
+closes_when: A developer can implement the new planner without relying on the old Board/Templates mental model.
+escalate_if: Native calendar integration, notifications, AI diet recommendations, or clinical nutrition targets are required.
+do_not: Do not implement source code in this gap.
+
+## GAP-072 — Model calendar-resolved meal plans
+phase: 2
+status: closed
+type: domain
+blocked_by: GAP-071, GAP-052
+goal: Add a planner domain model that resolves weekly, custom-loop, and individual-date plans into concrete calendar days.
+scope: Planner domain/application layer and tests.
+acceptance_criteria: Plans support weekly Mon-Sun, custom loop sequence from start date, and individual dates; day definitions store meals and optional macro targets; calendar resolution returns planned totals, eaten totals, left to target, and planned left; meal eaten state and serving overrides are date-specific.
+tests: Domain and application tests for all three modes, loop sequencing, day summaries, eaten toggles, serving overrides, and invalid inputs.
+closes_when: Calendar day behavior is testable without UI or persistence.
+escalate_if: Targets must become medical/diet recommendations or require automatic nutrition calculation.
+do_not: Do not add external nutrition services, native calendar APIs, or notifications.
+
+## GAP-073 — Persist planner schedule compatibility
+phase: 4
+status: closed
+type: data
+blocked_by: GAP-072, GAP-046
+goal: Persist the new planner schedule fields while keeping existing local plans readable.
+scope: Planner data mappers, IndexedDB/local repository compatibility, migration tests.
+acceptance_criteria: Existing loopDays/board records load into the new schedule model; new schedule/eaten/override fields survive reload; unsupported corrupt planner records fail safely; no existing recipes/cookbooks/plans are deleted.
+tests: Mapper tests, repository reload tests, legacy board/template compatibility tests.
+closes_when: A current local meal plan can be opened after the planner redesign without data loss.
+escalate_if: Cloud sync, account recovery, encryption, or real user data migration fixtures are required.
+do_not: Do not add backend sync or native storage permissions.
+
+## GAP-074 — Build planner setup flow
+phase: 3
+status: closed
+type: ui
+blocked_by: GAP-072, GAP-073
+goal: Let users create and edit plans through one Setup flow instead of Board/Templates tabs.
+scope: Planner presentation screen, setup components, styles, component tests.
+acceptance_criteria: Setup creates/edits weekly, custom-loop, and individual-date plans; users can add meals from saved recipes, set servings, and set optional day targets; custom loop days repeat by sequence from start date; old Board/Templates tabs are no longer exposed.
+tests: Component tests for each setup mode, validation, saved recipe selection, target entry, edit prefill, and removal of old mode tabs.
+closes_when: Users can configure a plan without understanding board/template terminology.
+escalate_if: Setup must support drag-and-drop, nested plans, or automatic recipe suggestions.
+do_not: Do not add AI recommendations, native calendar integration, or notifications.
+
+## GAP-075 — Build week/month calendar and day detail planner
+phase: 3
+status: open
+type: ui
+blocked_by: GAP-074, GAP-068
+goal: Show applied plans as a usable calendar with actionable day-level meal tracking.
+scope: Planner calendar UI, day detail UI, cook-mode handoff, integration/component tests.
+acceptance_criteria: Users can switch week/month views, choose the active plan, open a day, see macro/calorie summary, tick meals as eaten, edit servings for that date, expand meal details, and open the recipe/cook mode; summaries update immediately from checked meals and serving overrides.
+tests: Component tests for week/month rendering, day open, eaten toggles, macro summaries, serving overrides, collapsed meal rows, and cook link; integration test for reload persistence.
+closes_when: Planner is usable from a calendar-first flow and day tracking persists locally.
+escalate_if: Calendar sync, reminders, push notifications, or background tasks are required.
+do_not: Do not mutate recurring templates when a single date serving override changes.
+
+## GAP-076 — Make recipe pack export work in Android WebView
+phase: 4
+status: closed
+type: ui
+blocked_by: GAP-061, GAP-064, GAP-065
+goal: Make Download file produce an observable backup action inside the Capacitor Android app.
+scope: Recipe pack export UI, file save/share adapter, dependency wiring, tests, docs/import-export.md.
+acceptance_criteria: Download file is a real click handler; native Android writes the JSON pack to app cache and opens Android save/share options; web browsers still trigger a normal download; if neither path works, backup JSON is copied or selected with a visible status message.
+tests: Component tests for click/status/fallback; file adapter tests for native share, browser download, and clipboard fallback; npm.cmd run quality before mobile install.
+closes_when: Tapping Download file in the installed Android app no longer silently does nothing.
+escalate_if: The export must write directly to public Downloads without a chooser, require storage permissions, include binary photos, or sync to cloud.
+do_not: Do not add backend sync, cloud storage, public export links, overwrite semantics, or broad storage permissions.
+
+## GAP-077 — Add recipe archive, bulk deletion, and multi-cookbook selection
+phase: 3
+status: closed
+type: ui
+blocked_by: GAP-016, GAP-017, GAP-021, GAP-024
+goal: Make recipe lifecycle and cookbook organization practical on phone-sized screens.
+scope: Recipe use cases, recipe list UI, cookbook manager UI, app shell styles, recipe pack export behavior, component/unit tests, docs.
+acceptance_criteria: Top navigation labels wrap inside mobile buttons; users can archive/restore individual recipes, delete individual recipes with confirmation, archive/delete selected recipes in bulk, create additional local cookbooks, filter recipes by cookbook, and keep the default cookbook as the all-recipes view; recipe pack backup includes archived recipes.
+tests: Unit tests for archive/restore/bulk delete and mapper round trips; component tests for recipe list archive/bulk actions, cookbook filtering, and cookbook creation; full npm test suite; build/quality before Android install.
+closes_when: The app exposes tested phone-safe recipe archive/delete actions and multi-cookbook filtering without backend sync or duplicate recipe records.
+escalate_if: Archiving must cascade into meal plans, support undo history, require cloud sync, or change public cookbook ownership rules.
+do_not: Do not add backend sync, public publishing, account ownership, marketplace behavior, or destructive deletes without confirmation.
+
+## GAP-078 â€” Rebrand installed app to Comero
+phase: 5
+status: closed
+type: release
+blocked_by: GAP-009, GAP-076
+goal: Make the visible web and Android app brand Comero with the provided cookbook logo direction.
+scope: App config, app shell header, title metadata, Android labels, Android launcher/splash assets, brand docs, branding tests.
+acceptance_criteria: The app shell heading and document title say Comero; Android launcher label says Comero; the app header and launcher use the cookbook logo asset; legacy package/storage/recipe-pack identifiers remain compatible; focused branding tests and quality checks pass before reinstall.
+tests: App shell smoke tests, full npm quality, in-app browser smoke on phone-sized viewport, Android debug install.
+closes_when: A connected Android device receives an update-installed debug build showing Comero branding and logo assets.
+escalate_if: The Android package id must also change, the exact attached source image must be extracted from outside the workspace, or app-store signing assets are required.
+do_not: Do not change package id, wipe local data, add backend sync, or break existing recipe-pack imports.
+
+## GAP-079 - Replace generated Comero logo with exact attachment
+phase: 5
+status: closed
+type: release
+blocked_by: GAP-078
+goal: Replace the generated approximation with the exact Comero icon supplied by the user.
+scope: Comero logo source asset, Android launcher PNGs, Android splash PNGs, app icon background, build verification, Android install.
+acceptance_criteria: The app uses the extracted 1254x1254 attached PNG as `src/assets/comero-logo.png`; Android launcher and splash assets are resized from that exact PNG; the generated `comero-logo-mark.png` approximation is removed; browser and Android build checks pass before reinstall.
+tests: App shell smoke tests, Vite build or full quality, in-app browser logo smoke, Android debug install.
+closes_when: The connected Android device receives an update-installed debug build using the exact supplied icon.
+escalate_if: The source attachment cannot be extracted or a different source image is required.
+do_not: Do not redraw, regenerate, approximate, change package id, or wipe local app data.

@@ -3,9 +3,12 @@ import type { RecipeRepository } from "../../recipes/application/RecipeRepositor
 import {
   addLoopDay,
   addMealPlanEntry,
+  addMealPlanScheduleEntry,
   addPlannerBoardEntry,
   changeMealPlanEntryServings,
+  changeMealPlanScheduleEntryServings,
   changePlannerBoardEntryServings,
+  configureMealPlanSchedule,
   configurePlannerBoard,
   createMealPlan,
   getEmptyLoopDays,
@@ -14,16 +17,26 @@ import {
   movePlannerBoardEntry,
   normalizeMealPlan,
   removeMealPlanEntry,
+  removeMealPlanScheduleEntry,
   removePlannerBoardEntry,
+  resolveMealPlanCalendarDay,
+  resolveMealPlanCalendarRange,
+  setMealPlanDateEntryEaten,
+  setMealPlanDateEntryServings,
+  updateMealPlanDayTargets,
   type LoopDay,
   type LoopDayInput,
+  type MealPlanCalendarDaySummary,
   type MealPlan,
   type MealPlanEntryInput,
   type MealPlanInput,
+  type MealPlanScheduledEntryInput,
+  type MealPlanScheduleConfigurationInput,
   type PlannerBoardConfigurationInput,
   type PlannerBoardEntryInput,
   type PlannerBoardMoveInput,
   type PlannerDayBucket,
+  type PlannerNutritionTargets,
 } from "../domain/mealPlan";
 import type { MealPlanRepository } from "./MealPlanRepository";
 
@@ -39,6 +52,50 @@ export type MealPlanUseCases = {
   createPlan(input: MealPlanInput): Promise<Result<MealPlan, MealPlanUseCaseError>>;
   loadPlan(planId: string): Promise<Result<MealPlan, MealPlanUseCaseError>>;
   listPlans(): Promise<Result<ReadonlyArray<MealPlan>, MealPlanUseCaseError>>;
+  configureSchedule(
+    planId: string,
+    input: MealPlanScheduleConfigurationInput,
+  ): Promise<Result<MealPlan, MealPlanUseCaseError>>;
+  updateScheduleDayTargets(
+    planId: string,
+    dayId: string,
+    targets: PlannerNutritionTargets,
+  ): Promise<Result<MealPlan, MealPlanUseCaseError>>;
+  addScheduleEntry(
+    planId: string,
+    dayId: string,
+    input: MealPlanScheduledEntryInput,
+  ): Promise<Result<MealPlan, MealPlanUseCaseError>>;
+  changeScheduleEntryServings(
+    planId: string,
+    entryId: string,
+    servings: number,
+  ): Promise<Result<MealPlan, MealPlanUseCaseError>>;
+  removeScheduleEntry(
+    planId: string,
+    entryId: string,
+  ): Promise<Result<MealPlan, MealPlanUseCaseError>>;
+  setDateEntryEaten(
+    planId: string,
+    date: string,
+    entryId: string,
+    eaten: boolean,
+  ): Promise<Result<MealPlan, MealPlanUseCaseError>>;
+  setDateEntryServings(
+    planId: string,
+    date: string,
+    entryId: string,
+    servings: number,
+  ): Promise<Result<MealPlan, MealPlanUseCaseError>>;
+  resolveCalendarDay(
+    planId: string,
+    date: string,
+  ): Promise<Result<MealPlanCalendarDaySummary, MealPlanUseCaseError>>;
+  resolveCalendarRange(
+    planId: string,
+    startDate: string,
+    dayCount: number,
+  ): Promise<Result<ReadonlyArray<MealPlanCalendarDaySummary>, MealPlanUseCaseError>>;
   configureBoard(
     planId: string,
     input: PlannerBoardConfigurationInput,
@@ -116,6 +173,94 @@ export function createMealPlanUseCases(
     async listPlans() {
       try {
         return ok((await planRepository.list()).map(normalizeMealPlan));
+      } catch (error) {
+        return err(repositoryError(error));
+      }
+    },
+
+    async configureSchedule(planId, input) {
+      return updatePlan(planRepository, planId, (plan) => configureMealPlanSchedule(plan, input));
+    },
+
+    async updateScheduleDayTargets(planId, dayId, targets) {
+      return updatePlan(planRepository, planId, (plan) =>
+        updateMealPlanDayTargets(plan, dayId, targets),
+      );
+    },
+
+    async addScheduleEntry(planId, dayId, input) {
+      try {
+        const recipe = await recipeRepository.getById(input.recipeId);
+
+        if (!recipe) {
+          return err({
+            code: "not-found",
+            message: "Recipe was not found.",
+          });
+        }
+
+        return updatePlan(planRepository, planId, (plan) =>
+          addMealPlanScheduleEntry(plan, dayId, input),
+        );
+      } catch (error) {
+        return err(repositoryError(error));
+      }
+    },
+
+    async changeScheduleEntryServings(planId, entryId, servings) {
+      return updatePlan(planRepository, planId, (plan) =>
+        changeMealPlanScheduleEntryServings(plan, entryId, servings),
+      );
+    },
+
+    async removeScheduleEntry(planId, entryId) {
+      return updatePlan(planRepository, planId, (plan) =>
+        removeMealPlanScheduleEntry(plan, entryId),
+      );
+    },
+
+    async setDateEntryEaten(planId, date, entryId, eaten) {
+      return updatePlan(planRepository, planId, (plan) =>
+        setMealPlanDateEntryEaten(plan, date, entryId, eaten),
+      );
+    },
+
+    async setDateEntryServings(planId, date, entryId, servings) {
+      return updatePlan(planRepository, planId, (plan) =>
+        setMealPlanDateEntryServings(plan, date, entryId, servings),
+      );
+    },
+
+    async resolveCalendarDay(planId, date) {
+      const plan = await loadPlan(planRepository, planId);
+
+      if (!plan.ok) {
+        return err(plan.error);
+      }
+
+      try {
+        return ok(resolveMealPlanCalendarDay(plan.value, await recipeRepository.list(), date));
+      } catch (error) {
+        return err(repositoryError(error));
+      }
+    },
+
+    async resolveCalendarRange(planId, startDate, dayCount) {
+      const plan = await loadPlan(planRepository, planId);
+
+      if (!plan.ok) {
+        return err(plan.error);
+      }
+
+      try {
+        return ok(
+          resolveMealPlanCalendarRange(
+            plan.value,
+            await recipeRepository.list(),
+            startDate,
+            dayCount,
+          ),
+        );
       } catch (error) {
         return err(repositoryError(error));
       }

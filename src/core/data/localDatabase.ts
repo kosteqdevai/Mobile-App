@@ -236,7 +236,7 @@ export class BrowserIndexedDbDatabase implements LocalDatabase {
         reject(
           new LocalDatabaseError(
             "database-unavailable",
-            "IndexedDB upgrade is blocked by another open LaCucina tab.",
+            "IndexedDB upgrade is blocked by another open Comero tab.",
           ),
         );
       };

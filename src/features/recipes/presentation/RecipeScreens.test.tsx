@@ -120,6 +120,14 @@ function createRecipeUseCases(overrides: Partial<RecipeUseCases> = {}): RecipeUs
     createRecipe: vi.fn(async () => ok(sampleRecipe)),
     updateRecipe: vi.fn(async () => ok(sampleRecipe)),
     deleteRecipe: vi.fn(async () => ok(undefined)),
+    deleteRecipes: vi.fn(async () => ok(undefined)),
+    archiveRecipe: vi.fn(async () =>
+      ok({ ...sampleRecipe, archivedAt: "2026-05-23T00:00:00.000Z" }),
+    ),
+    archiveRecipes: vi.fn(async () =>
+      ok([{ ...sampleRecipe, archivedAt: "2026-05-23T00:00:00.000Z" }]),
+    ),
+    restoreRecipe: vi.fn(async () => ok(sampleRecipe)),
     getRecipeDetails: vi.fn(async () => ok(sampleRecipe)),
     listRecipes: vi.fn(async () => ok([sampleRecipe])),
     previewPortions: vi.fn(async (_recipeId, targetServings) =>
@@ -184,6 +192,26 @@ function createRecipeExportUseCaseFixture(
   };
 }
 
+function getAdvancedRecipeDetails() {
+  const details = screen.getByText("More recipe options").closest("details");
+
+  if (!(details instanceof HTMLDetailsElement)) {
+    throw new Error("Advanced recipe options details element was not rendered.");
+  }
+
+  return details;
+}
+
+function openAdvancedRecipeOptions() {
+  const details = getAdvancedRecipeDetails();
+
+  if (!details.open) {
+    fireEvent.click(screen.getByText("More recipe options"));
+  }
+
+  return details;
+}
+
 describe("RecipeListScreen", () => {
   it("shows loading, error, empty, and filtered list states", async () => {
     const neverResolvingUseCases = createRecipeUseCases({
@@ -192,8 +220,10 @@ describe("RecipeListScreen", () => {
 
     const { rerender } = render(
       <RecipeListScreen
+        cookbookUseCases={createCookbookUseCases()}
         recipeUseCases={neverResolvingUseCases}
         onCreateRecipe={vi.fn()}
+        onChanged={vi.fn()}
         onEditRecipe={vi.fn()}
         onOpenRecipe={vi.fn()}
       />,
@@ -203,12 +233,14 @@ describe("RecipeListScreen", () => {
 
     rerender(
       <RecipeListScreen
+        cookbookUseCases={createCookbookUseCases()}
         recipeUseCases={createRecipeUseCases({
           listRecipes: vi.fn(async () =>
             err({ code: "repository", message: "Offline recipe store" }),
           ),
         })}
         onCreateRecipe={vi.fn()}
+        onChanged={vi.fn()}
         onEditRecipe={vi.fn()}
         onOpenRecipe={vi.fn()}
       />,
@@ -218,8 +250,10 @@ describe("RecipeListScreen", () => {
 
     rerender(
       <RecipeListScreen
+        cookbookUseCases={createCookbookUseCases()}
         recipeUseCases={createRecipeUseCases({ listRecipes: vi.fn(async () => ok([])) })}
         onCreateRecipe={vi.fn()}
+        onChanged={vi.fn()}
         onEditRecipe={vi.fn()}
         onOpenRecipe={vi.fn()}
       />,
@@ -229,8 +263,10 @@ describe("RecipeListScreen", () => {
 
     rerender(
       <RecipeListScreen
+        cookbookUseCases={createCookbookUseCases()}
         recipeUseCases={createRecipeUseCases()}
         onCreateRecipe={vi.fn()}
+        onChanged={vi.fn()}
         onEditRecipe={vi.fn()}
         onOpenRecipe={vi.fn()}
       />,
@@ -251,10 +287,12 @@ describe("RecipeListScreen", () => {
 
     render(
       <RecipeListScreen
+        cookbookUseCases={createCookbookUseCases()}
         recipeUseCases={createRecipeUseCases({
           listRecipes: vi.fn(async () => ok(recipes)),
         })}
         onCreateRecipe={vi.fn()}
+        onChanged={vi.fn()}
         onEditRecipe={vi.fn()}
         onOpenRecipe={vi.fn()}
       />,
@@ -267,6 +305,126 @@ describe("RecipeListScreen", () => {
     expect(
       screen.queryByRole("button", { name: /Batch recipe 1 servings/i }),
     ).not.toBeInTheDocument();
+  });
+
+  it("filters by selected cookbook while default cookbook still shows all recipes", async () => {
+    const dessertRecipe: Recipe = {
+      ...sampleRecipe,
+      id: "recipe-dessert",
+      title: "Chocolate mousse",
+      tags: ["dessert"],
+    };
+    const dessertCookbook: Cookbook = {
+      id: "cookbook-desserts",
+      name: "Desserts",
+      categories: [
+        {
+          id: "category-dessert",
+          name: "Desserts",
+          recipeIds: ["recipe-dessert"],
+          children: [],
+        },
+      ],
+      createdAt: "2026-05-22T00:00:00.000Z",
+      updatedAt: "2026-05-22T00:00:00.000Z",
+    };
+
+    render(
+      <RecipeListScreen
+        cookbookUseCases={createCookbookUseCases({
+          listCookbooks: vi.fn(async () => ok([sampleCookbook, dessertCookbook])),
+        })}
+        recipeUseCases={createRecipeUseCases({
+          listRecipes: vi.fn(async () => ok([sampleRecipe, dessertRecipe])),
+        })}
+        onCreateRecipe={vi.fn()}
+        onChanged={vi.fn()}
+        onEditRecipe={vi.fn()}
+        onOpenRecipe={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByRole("button", { name: /Lemon pasta/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Chocolate mousse/i })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Filter recipes by cookbook"), {
+      target: { value: "cookbook-desserts" },
+    });
+
+    expect(screen.queryByRole("button", { name: /Lemon pasta/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Chocolate mousse/i })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Filter recipes by cookbook"), {
+      target: { value: "cookbook-default" },
+    });
+
+    expect(screen.getByRole("button", { name: /Lemon pasta/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Chocolate mousse/i })).toBeInTheDocument();
+  });
+
+  it("archives single recipes and deletes selected recipes in bulk", async () => {
+    const secondRecipe: Recipe = {
+      ...sampleRecipe,
+      id: "recipe-2",
+      title: "Carrot soup",
+      tags: ["soup"],
+    };
+    let recipes = [sampleRecipe, secondRecipe];
+    const archiveRecipe = vi.fn(async (recipeId: string) => {
+      recipes = recipes.map((recipe) =>
+        recipe.id === recipeId ? { ...recipe, archivedAt: "2026-05-23T00:00:00.000Z" } : recipe,
+      );
+      return ok(recipes.find((recipe) => recipe.id === recipeId) ?? sampleRecipe);
+    });
+    const deleteRecipes = vi.fn(async (recipeIds: ReadonlyArray<string>) => {
+      recipes = recipes.filter((recipe) => !recipeIds.includes(recipe.id));
+      return ok(undefined);
+    });
+
+    render(
+      <RecipeListScreen
+        cookbookUseCases={createCookbookUseCases()}
+        recipeUseCases={createRecipeUseCases({
+          archiveRecipe,
+          deleteRecipes,
+          listRecipes: vi.fn(async (filters) =>
+            ok(
+              recipes.filter((recipe) =>
+                filters?.archivedOnly ? Boolean(recipe.archivedAt) : !recipe.archivedAt,
+              ),
+            ),
+          ),
+        })}
+        onCreateRecipe={vi.fn()}
+        onChanged={vi.fn()}
+        onEditRecipe={vi.fn()}
+        onOpenRecipe={vi.fn()}
+      />,
+    );
+
+    const lemonCard = (await screen.findByText("Lemon pasta")).closest("article");
+    if (!lemonCard) {
+      throw new Error("Expected lemon recipe card.");
+    }
+
+    fireEvent.click(within(lemonCard).getByRole("button", { name: "Archive" }));
+    await waitFor(() => {
+      expect(archiveRecipe).toHaveBeenCalledWith("recipe-1");
+    });
+    expect(screen.queryByRole("button", { name: /Lemon pasta/i })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Select recipes" }));
+    fireEvent.click(screen.getByLabelText("Select Carrot soup"));
+    fireEvent.click(screen.getByRole("button", { name: "Delete selected" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm bulk delete" }));
+
+    await waitFor(() => {
+      expect(deleteRecipes).toHaveBeenCalledWith(["recipe-2"]);
+    });
+    expect(screen.getByText("No recipes yet")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText("Archived"));
+    expect(await screen.findByRole("button", { name: /Lemon pasta/i })).toBeInTheDocument();
   });
 });
 
@@ -408,6 +566,31 @@ describe("RecipeDetailScreen", () => {
 });
 
 describe("RecipeFormScreen", () => {
+  it("keeps optional metadata collapsed behind quick recipe entry", () => {
+    render(
+      <RecipeFormScreen
+        cookbookUseCases={createCookbookUseCases()}
+        recipeUseCases={createRecipeUseCases()}
+        mode="create"
+        onCancel={vi.fn()}
+        onSaved={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByLabelText("Recipe title")).toBeInTheDocument();
+    expect(screen.getByLabelText("Base servings")).toBeInTheDocument();
+    expect(screen.getByLabelText("Ingredient 1 name")).toBeInTheDocument();
+    expect(screen.getByLabelText("Step 1 text")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save recipe" })).toBeInTheDocument();
+    expect(getAdvancedRecipeDetails()).not.toHaveAttribute("open");
+
+    const advancedDetails = openAdvancedRecipeOptions();
+
+    expect(advancedDetails).toHaveAttribute("open");
+    expect(screen.getByLabelText("Recipe description")).toBeInTheDocument();
+    expect(screen.getByLabelText("Template recipe")).toBeInTheDocument();
+  });
+
   it("submits valid recipe values through use cases", async () => {
     const createRecipe = vi.fn(async () => ok(sampleRecipe));
     const onSaved = vi.fn();
@@ -428,6 +611,7 @@ describe("RecipeFormScreen", () => {
     fireEvent.change(screen.getByLabelText("Step 1 text"), {
       target: { value: "Boil pasta." },
     });
+    openAdvancedRecipeOptions();
     fireEvent.click(screen.getByLabelText("Template recipe"));
     fireEvent.click(screen.getByRole("button", { name: "Save recipe" }));
 
@@ -451,6 +635,7 @@ describe("RecipeFormScreen", () => {
       />,
     );
 
+    openAdvancedRecipeOptions();
     fireEvent.change(await screen.findByLabelText("Recipe category"), {
       target: { value: "cookbook-default:category-quick" },
     });
@@ -544,6 +729,7 @@ describe("RecipeFormScreen", () => {
       />,
     );
 
+    openAdvancedRecipeOptions();
     expect(await screen.findByText("No recipe categories")).toBeInTheDocument();
     emptyView.unmount();
 
@@ -561,6 +747,7 @@ describe("RecipeFormScreen", () => {
       />,
     );
 
+    openAdvancedRecipeOptions();
     expect(await screen.findByRole("alert")).toHaveTextContent("Cookbook store unavailable");
   });
 
@@ -577,6 +764,7 @@ describe("RecipeFormScreen", () => {
       />,
     );
 
+    openAdvancedRecipeOptions();
     fireEvent.change(screen.getByLabelText("Recipe title"), { target: { value: "Layered stew" } });
     fireEvent.change(screen.getByLabelText("Prep minutes"), { target: { value: "20" } });
     fireEvent.change(screen.getByLabelText("Cook minutes"), { target: { value: "45" } });
@@ -705,6 +893,7 @@ describe("RecipeFormScreen", () => {
       />,
     );
 
+    openAdvancedRecipeOptions();
     expect(await screen.findByLabelText("Template recipe to import")).toHaveValue(
       "recipe-template-dough",
     );

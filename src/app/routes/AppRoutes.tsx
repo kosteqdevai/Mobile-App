@@ -1,5 +1,6 @@
 import { useAppDependencies } from "../providers/useAppDependencies";
 import { useState } from "react";
+import comeroLogo from "../../assets/comero-logo.png";
 import { CookbookManagerScreen } from "../../features/cookbooks/presentation/CookbookManagerScreen";
 import { PlannerScreen } from "../../features/planner/presentation/PlannerScreen";
 import { RecipeDetailScreen } from "../../features/recipes/presentation/RecipeDetailScreen";
@@ -16,24 +17,37 @@ export function AppRoutes() {
     cookbookUseCases,
     mealPlanUseCases,
     recipeExportUseCases,
+    recipePackFileUseCases,
     recipePackUseCases,
     recipeUseCases,
   } = useAppDependencies();
   const [route, setRoute] = useState<AppRoute>({ name: "recipes" });
   const [revision, setRevision] = useState(0);
   const [recipeTransferState, setRecipeTransferState] = useState(initialRecipeTransferScreenState);
+  const appShellLabel = `${appConfig.name} app shell`;
 
   function markChanged() {
     setRevision((current) => current + 1);
+    setRecipeTransferState((current) =>
+      current.exportState.status === "idle"
+        ? current
+        : {
+            ...current,
+            exportState: { status: "idle" },
+          },
+    );
   }
 
   return (
     <main className="app-shell" aria-labelledby="app-title">
       <header className="app-header">
-        <div>
-          <p className="app-shell__eyebrow">{appConfig.stage}</p>
-          <h1 id="app-title">{appConfig.name}</h1>
-          <p className="app-shell__summary">Personal cookbook</p>
+        <div className="app-brand">
+          <img className="app-brand__logo" src={comeroLogo} alt={`${appConfig.name} logo`} />
+          <div>
+            <p className="app-shell__eyebrow">{appConfig.stage}</p>
+            <h1 id="app-title">{appConfig.name}</h1>
+            <p className="app-shell__summary">Personal cookbook</p>
+          </div>
         </div>
         <nav className="app-nav" aria-label="Primary">
           <button type="button" onClick={() => setRoute({ name: "recipes" })}>
@@ -51,12 +65,14 @@ export function AppRoutes() {
         </nav>
       </header>
 
-      <section className="app-shell__surface" aria-label="LaCucina app shell">
+      <section className="app-shell__surface" aria-label={appShellLabel}>
         {route.name === "recipes" ? (
           <RecipeListScreen
             key={`recipes-${revision}`}
+            cookbookUseCases={cookbookUseCases}
             recipeUseCases={recipeUseCases}
             onCreateRecipe={() => setRoute({ name: "recipe-create" })}
+            onChanged={markChanged}
             onEditRecipe={(recipeId) => setRoute({ name: "recipe-edit", recipeId })}
             onOpenRecipe={(recipeId) => setRoute({ name: "recipe-detail", recipeId })}
           />
@@ -65,6 +81,8 @@ export function AppRoutes() {
         {route.name === "recipe-detail" ? (
           <RecipeDetailScreen
             cookSessionUseCases={cookSessionUseCases}
+            initialCookModeActive={route.openCookMode}
+            initialTargetServings={route.targetServings}
             recipeId={route.recipeId}
             recipeExportUseCases={recipeExportUseCases}
             recipeUseCases={recipeUseCases}
@@ -115,6 +133,14 @@ export function AppRoutes() {
         {route.name === "planner" ? (
           <PlannerScreen
             mealPlanUseCases={mealPlanUseCases}
+            onOpenRecipe={(recipeId, servings, openCookMode) =>
+              setRoute({
+                name: "recipe-detail",
+                recipeId,
+                targetServings: servings,
+                openCookMode,
+              })
+            }
             recipeUseCases={recipeUseCases}
             onChanged={markChanged}
           />
@@ -122,6 +148,7 @@ export function AppRoutes() {
 
         {route.name === "backup" ? (
           <RecipeTransferScreen
+            recipePackFileUseCases={recipePackFileUseCases}
             recipePackUseCases={recipePackUseCases}
             transferState={recipeTransferState}
             onImported={markChanged}

@@ -18,6 +18,8 @@ type RecipeDetailScreenProps = {
   recipeUseCases: RecipeUseCases;
   recipeExportUseCases: RecipeExportUseCases;
   cookSessionUseCases: CookSessionUseCases;
+  initialTargetServings?: number;
+  initialCookModeActive?: boolean;
   onBack: () => void;
   onEdit: (recipeId: string) => void;
 };
@@ -36,6 +38,8 @@ type IngredientGroup = {
 export function RecipeDetailScreen({
   recipeId,
   cookSessionUseCases,
+  initialCookModeActive,
+  initialTargetServings,
   recipeExportUseCases,
   recipeUseCases,
   onBack,
@@ -71,11 +75,12 @@ export function RecipeDetailScreen({
         return;
       }
 
-      setTargetServings(recipeResult.value.baseServings);
-      const scaledResult = await recipeUseCases.previewPortions(
-        recipeId,
-        recipeResult.value.baseServings,
-      );
+      const startingServings =
+        initialTargetServings && Number.isFinite(initialTargetServings) && initialTargetServings > 0
+          ? initialTargetServings
+          : recipeResult.value.baseServings;
+      setTargetServings(startingServings);
+      const scaledResult = await recipeUseCases.previewPortions(recipeId, startingServings);
       const sessionResult = await cookSessionUseCases.loadSession(recipeId);
 
       if (cancelled) {
@@ -97,6 +102,7 @@ export function RecipeDetailScreen({
           ? sessionResult.value
           : createDefaultCookSession(recipeResult.value),
       );
+      setCookModeActive(Boolean(initialCookModeActive));
     }
 
     void loadRecipe();
@@ -104,7 +110,7 @@ export function RecipeDetailScreen({
     return () => {
       cancelled = true;
     };
-  }, [cookSessionUseCases, recipeId, recipeUseCases]);
+  }, [cookSessionUseCases, initialCookModeActive, initialTargetServings, recipeId, recipeUseCases]);
 
   async function updateServings(nextServings: number) {
     setTargetServings(nextServings);

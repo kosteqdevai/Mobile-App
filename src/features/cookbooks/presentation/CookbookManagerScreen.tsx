@@ -31,6 +31,7 @@ export function CookbookManagerScreen({
   onChanged,
 }: CookbookManagerScreenProps) {
   const [cookbookState, setCookbookState] = useState<CookbookState>({ status: "loading" });
+  const [cookbookName, setCookbookName] = useState("");
   const [categoryName, setCategoryName] = useState("");
   const [renameValue, setRenameValue] = useState("");
   const [recipeId, setRecipeId] = useState("");
@@ -64,7 +65,7 @@ export function CookbookManagerScreen({
     );
   }, [cookbookState, selectedCookbook]);
 
-  async function loadCookbooks(nextSelectedCategoryId?: string) {
+  async function loadCookbooks(nextSelectedCookbookId?: string, nextSelectedCategoryId?: string) {
     setCookbookState({ status: "loading" });
     const [cookbookResult, recipeResult] = await Promise.all([
       cookbookUseCases.listCookbooks(),
@@ -81,18 +82,52 @@ export function CookbookManagerScreen({
       return;
     }
 
-    const firstCookbook = cookbookResult.value[0];
-    const firstCategory = firstCookbook
-      ? flattenCategories(firstCookbook.categories)[0]
+    const selectedCookbook =
+      cookbookResult.value.find((cookbook) => cookbook.id === nextSelectedCookbookId) ??
+      cookbookResult.value[0];
+    const firstCategory = selectedCookbook
+      ? flattenCategories(selectedCookbook.categories)[0]
       : undefined;
 
     setCookbookState({
       status: "ready",
       cookbooks: cookbookResult.value,
       recipes: recipeResult.value,
-      selectedCookbookId: firstCookbook?.id ?? "",
+      selectedCookbookId: selectedCookbook?.id ?? "",
       selectedCategoryId: nextSelectedCategoryId ?? firstCategory?.id,
     });
+  }
+
+  async function createCookbook() {
+    if (cookbookState.status !== "ready") {
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const timestamp = Date.now();
+    const result = await cookbookUseCases.createCookbook({
+      id: `cookbook-${timestamp}`,
+      name: cookbookName,
+      categories: [
+        {
+          id: `category-${timestamp}-general`,
+          name: "General",
+          recipeIds: [],
+          children: [],
+        },
+      ],
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    if (!result.ok) {
+      setCookbookState({ ...cookbookState, error: result.error.message });
+      return;
+    }
+
+    setCookbookName("");
+    onChanged();
+    await loadCookbooks(result.value.id, result.value.categories[0]?.id);
   }
 
   async function createCategory() {
@@ -112,7 +147,7 @@ export function CookbookManagerScreen({
 
     setCategoryName("");
     onChanged();
-    await loadCookbooks(result.value.categories.at(-1)?.id);
+    await loadCookbooks(selectedCookbook.id, result.value.categories.at(-1)?.id);
   }
 
   async function renameCategory() {
@@ -133,7 +168,7 @@ export function CookbookManagerScreen({
 
     setRenameValue("");
     onChanged();
-    await loadCookbooks(selectedCategory.id);
+    await loadCookbooks(selectedCookbook.id, selectedCategory.id);
   }
 
   async function assignRecipe() {
@@ -154,7 +189,7 @@ export function CookbookManagerScreen({
 
     setRecipeId("");
     onChanged();
-    await loadCookbooks(selectedCategory.id);
+    await loadCookbooks(selectedCookbook.id, selectedCategory.id);
   }
 
   async function unassignRecipe(recipeIdToRemove: string) {
@@ -174,7 +209,7 @@ export function CookbookManagerScreen({
     }
 
     onChanged();
-    await loadCookbooks(selectedCategory.id);
+    await loadCookbooks(selectedCookbook.id, selectedCategory.id);
   }
 
   async function deleteSelectedCategory() {
@@ -193,7 +228,7 @@ export function CookbookManagerScreen({
     }
 
     onChanged();
-    await loadCookbooks();
+    await loadCookbooks(selectedCookbook.id);
   }
 
   if (cookbookState.status === "loading") {
@@ -237,14 +272,21 @@ export function CookbookManagerScreen({
         <select
           aria-label="Selected cookbook"
           value={cookbookState.selectedCookbookId}
-          onChange={(event) =>
+          onChange={(event) => {
+            const nextCookbook = cookbookState.cookbooks.find(
+              (cookbook) => cookbook.id === event.target.value,
+            );
+            const nextCategory = nextCookbook
+              ? flattenCategories(nextCookbook.categories)[0]
+              : undefined;
+
             setCookbookState({
               ...cookbookState,
               selectedCookbookId: event.target.value,
-              selectedCategoryId: undefined,
+              selectedCategoryId: nextCategory?.id,
               error: undefined,
-            })
-          }
+            });
+          }}
         >
           {cookbookState.cookbooks.map((cookbook) => (
             <option key={cookbook.id} value={cookbook.id}>
@@ -253,6 +295,27 @@ export function CookbookManagerScreen({
           ))}
         </select>
       </label>
+      {cookbookState.selectedCookbookId === "cookbook-default" ? (
+        <p className="muted-text">
+          The default cookbook is the all-recipes home. Extra cookbook/category assignments do not
+          duplicate recipes.
+        </p>
+      ) : null}
+
+      <div className="form-grid">
+        <label>
+          <span>New cookbook</span>
+          <input
+            aria-label="New cookbook name"
+            placeholder="Family meals, Meal prep, Desserts"
+            value={cookbookName}
+            onChange={(event) => setCookbookName(event.target.value)}
+          />
+        </label>
+        <button className="primary-button" type="button" onClick={() => void createCookbook()}>
+          Create cookbook
+        </button>
+      </div>
 
       <div className="split-panel">
         <section aria-labelledby="categories-title">
@@ -282,6 +345,10 @@ export function CookbookManagerScreen({
 
         <section className="screen-stack" aria-labelledby="category-actions-title">
           <h3 id="category-actions-title">Manage category</h3>
+          <p className="muted-text">
+            Recipe assignments are additive, so one recipe can live in several cookbooks or
+            categories.
+          </p>
           <div className="form-grid">
             <label>
               <span>New category</span>

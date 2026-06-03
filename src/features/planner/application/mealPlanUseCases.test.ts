@@ -17,6 +17,10 @@ const recipe: Recipe = {
   categoryPath: ["Dinner"],
   tags: [],
   difficulty: "beginner",
+  nutrition: {
+    calories: { amount: 400, unit: "kcal" },
+    protein: { amount: 20, unit: "g" },
+  },
   isFavorite: false,
   createdAt: "2026-05-22T00:00:00.000Z",
   updatedAt: "2026-05-22T00:00:00.000Z",
@@ -158,6 +162,71 @@ describe("meal plan use cases", () => {
       throw new Error("Expected plans.");
     }
     expect(listed.value[0]?.board?.preset).toBe("customLoop");
+    expect(listed.value[0]?.schedule?.mode).toBe("customLoop");
+  });
+
+  it("configures schedule entries and resolves date-specific totals", async () => {
+    const planRepository = new FakeMealPlanRepository([plan]);
+    const useCases = createMealPlanUseCases(planRepository, new FakeRecipeRepository([recipe]));
+
+    const configured = await useCases.configureSchedule("plan-1", {
+      mode: "weekly",
+      startDate: "2026-05-25",
+    });
+    expect(configured.ok).toBe(true);
+
+    const targets = await useCases.updateScheduleDayTargets("plan-1", "schedule-day-monday-1", {
+      calories: 1000,
+      protein: 80,
+    });
+    expect(targets.ok).toBe(true);
+
+    const added = await useCases.addScheduleEntry("plan-1", "schedule-day-monday-1", {
+      id: "schedule-entry-1",
+      recipeId: "recipe-1",
+      servings: 2,
+      slotLabel: "Lunch",
+      context: "eat",
+    });
+    expect(added.ok).toBe(true);
+
+    const servings = await useCases.setDateEntryServings(
+      "plan-1",
+      "2026-05-25",
+      "schedule-entry-1",
+      3,
+    );
+    expect(servings.ok).toBe(true);
+
+    const eaten = await useCases.setDateEntryEaten(
+      "plan-1",
+      "2026-05-25",
+      "schedule-entry-1",
+      true,
+    );
+    expect(eaten.ok).toBe(true);
+
+    const summary = await useCases.resolveCalendarDay("plan-1", "2026-05-25");
+    expect(summary.ok).toBe(true);
+    if (!summary.ok) {
+      throw new Error("Expected calendar day summary.");
+    }
+
+    expect(summary.value.entries[0]).toMatchObject({
+      title: "Rice",
+      effectiveServings: 3,
+      eaten: true,
+    });
+    expect(summary.value.plannedTotals.calories).toBe(600);
+    expect(summary.value.leftToTarget.calories).toBe(400);
+    expect(summary.value.plannedLeft.calories).toBe(0);
+
+    const range = await useCases.resolveCalendarRange("plan-1", "2026-05-25", 7);
+    expect(range.ok).toBe(true);
+    if (!range.ok) {
+      throw new Error("Expected calendar range.");
+    }
+    expect(range.value).toHaveLength(7);
   });
 
   it("returns not found for missing recipes and plans", async () => {

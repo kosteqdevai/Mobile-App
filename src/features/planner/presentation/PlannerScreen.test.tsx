@@ -47,122 +47,123 @@ const samplePlan: MealPlan = {
 };
 
 describe("PlannerScreen", () => {
-  it("configures board entries, custom slots, moves entries, and removes entries", async () => {
-    const recipeRepository = new InMemoryRecipeRepository([sampleRecipe]);
-    const recipeUseCases = createRecipeUseCases(recipeRepository);
-    const mealPlanUseCases = createMealPlanUseCases(
-      new InMemoryMealPlanRepository([samplePlan]),
-      recipeRepository,
-    );
-
-    render(
-      <PlannerScreen
-        mealPlanUseCases={mealPlanUseCases}
-        recipeUseCases={recipeUseCases}
-        onChanged={vi.fn()}
-      />,
-    );
+  it("configures weekly setup, tracks eaten meals, overrides servings, and opens cook mode", async () => {
+    const onOpenRecipe = vi.fn();
+    renderPlanner({ onOpenRecipe });
 
     expect(await screen.findByRole("heading", { name: "Planner" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Board" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getAllByText("No meals planned")).toHaveLength(2);
+    expect(screen.queryByRole("tab", { name: "Board" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Templates" })).not.toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("Board recipe for Training Day"), {
+    fireEvent.click(screen.getByRole("button", { name: "Setup plan" }));
+    fireEvent.change(screen.getByLabelText("Planner setup mode"), {
+      target: { value: "weekly" },
+    });
+    fireEvent.change(screen.getByLabelText("Planner setup start date"), {
+      target: { value: "2026-05-25" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Apply setup" }));
+
+    expect(await screen.findByLabelText("Monday Calories target")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Monday Calories target"), {
+      target: { value: "1000" },
+    });
+    fireEvent.change(screen.getByLabelText("Monday Protein target"), {
+      target: { value: "80" },
+    });
+    fireEvent.click(
+      within(screen.getAllByRole("region", { name: "Monday" })[0]).getByRole("button", {
+        name: "Save targets",
+      }),
+    );
+
+    fireEvent.change(screen.getByLabelText("Setup recipe for Monday"), {
       target: { value: "recipe-1" },
     });
-    fireEvent.change(screen.getByLabelText("Board servings for Training Day"), {
+    fireEvent.change(screen.getByLabelText("Setup new servings for Monday"), {
       target: { value: "3" },
     });
-    fireEvent.change(screen.getByLabelText("Board slot for Training Day"), {
-      target: { value: "__custom-slot" },
-    });
-    fireEvent.change(screen.getByLabelText("Board custom slot for Training Day"), {
-      target: { value: "Post workout" },
-    });
-    fireEvent.change(screen.getByLabelText("Board context for Training Day"), {
-      target: { value: "cook" },
+    fireEvent.change(screen.getByLabelText("Setup meal label for Monday"), {
+      target: { value: "Lunch" },
     });
     fireEvent.click(
-      within(screen.getByRole("region", { name: "Training Day" })).getByRole("button", {
-        name: "Add to board",
+      within(screen.getAllByRole("region", { name: "Monday" })[0]).getByRole("button", {
+        name: "Add meal",
       }),
     );
 
-    expect(await screen.findByLabelText("Board servings for Lemon pasta")).toHaveValue(3);
-    expect(
-      screen.getByText(/Post workout .* cook .* Nutrition: Calories 600 kcal/i),
-    ).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Board servings for Lemon pasta"), {
+    await waitFor(() =>
+      expect(screen.getAllByText(/Calories 600 kcal/i).length).toBeGreaterThan(0),
+    );
+    expect(screen.getAllByText(/Protein 30 g/i).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByLabelText("Mark Lemon pasta eaten on 2026-05-25"));
+    await waitFor(() => {
+      expect(screen.getByRole("region", { name: "Eaten" })).toHaveTextContent(/Calories 600 kcal/i);
+    });
+    expect(screen.getByRole("region", { name: "Left to target" })).toHaveTextContent(
+      /Calories 400 kcal/i,
+    );
+    expect(screen.getByRole("region", { name: "Planned left" })).toHaveTextContent(
+      /Calories 0 kcal/i,
+    );
+
+    fireEvent.change(screen.getByLabelText("Date servings for Lemon pasta"), {
       target: { value: "4" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Update Lemon pasta board entry" }));
-
+    fireEvent.click(screen.getByRole("button", { name: "Save Lemon pasta date servings" }));
     await waitFor(() => {
-      expect(screen.getByLabelText("Board servings for Lemon pasta")).toHaveValue(4);
+      expect(screen.getByRole("region", { name: "Eaten" })).toHaveTextContent(/Calories 800 kcal/i);
     });
 
-    fireEvent.change(screen.getByLabelText("Move Lemon pasta to day"), {
-      target: { value: "day-rest" },
-    });
-    fireEvent.change(screen.getByLabelText("Move Lemon pasta to slot"), {
-      target: { value: "slot-dinner" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Move Lemon pasta board entry" }));
-
-    const restDay = await screen.findByRole("region", { name: "Non-training Day" });
-    expect(within(restDay).getByLabelText("Board servings for Lemon pasta")).toHaveValue(4);
-    expect(within(restDay).getByText(/Dinner .* cook/i)).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Remove Lemon pasta board entry" }));
-    await waitFor(() => {
-      expect(screen.getAllByText("No meals planned")).toHaveLength(2);
-    });
+    fireEvent.click(screen.getByRole("button", { name: "Cook Lemon pasta" }));
+    expect(onOpenRecipe).toHaveBeenCalledWith("recipe-1", 4, true);
   });
 
-  it("keeps loop templates available and exposes move controls", async () => {
-    const recipeRepository = new InMemoryRecipeRepository([sampleRecipe]);
-    const recipeUseCases = createRecipeUseCases(recipeRepository);
-    const mealPlanUseCases = createMealPlanUseCases(
-      new InMemoryMealPlanRepository([samplePlan]),
-      recipeRepository,
-    );
-
-    render(
-      <PlannerScreen
-        mealPlanUseCases={mealPlanUseCases}
-        recipeUseCases={recipeUseCases}
-        onChanged={vi.fn()}
-      />,
-    );
+  it("supports custom loop sequencing from a start date", async () => {
+    renderPlanner();
 
     expect(await screen.findByRole("heading", { name: "Planner" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("tab", { name: "Templates" }));
-
-    fireEvent.change(screen.getByLabelText("Recipe for Training Day"), {
-      target: { value: "recipe-1" },
+    fireEvent.click(screen.getByRole("button", { name: "Setup plan" }));
+    fireEvent.change(screen.getByLabelText("Planner setup mode"), {
+      target: { value: "customLoop" },
     });
-    fireEvent.change(screen.getByLabelText("New servings for Training Day"), {
-      target: { value: "2" },
+    fireEvent.change(screen.getByLabelText("Planner setup start date"), {
+      target: { value: "2026-06-01" },
     });
-    fireEvent.click(
-      within(screen.getByRole("region", { name: "Training Day" })).getByRole("button", {
-        name: "Add recipe",
-      }),
-    );
-
-    const trainingDay = screen.getByRole("region", { name: "Training Day" });
-    expect(
-      await within(trainingDay).findByLabelText("Move Lemon pasta to template day"),
-    ).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Move Lemon pasta to template day"), {
-      target: { value: "day-rest" },
+    fireEvent.change(screen.getByLabelText("Custom loop day labels"), {
+      target: { value: "High day, Low day, Rest day" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Move Lemon pasta template entry" }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply setup" }));
 
-    const restDay = await screen.findByRole("region", { name: "Non-training Day" });
     await waitFor(() => {
-      expect(within(restDay).getByLabelText("Servings for Lemon pasta")).toHaveValue(2);
+      expect(screen.getByRole("button", { name: "Open 2026-06-01" })).toHaveTextContent("High day");
     });
+    expect(screen.getByRole("button", { name: "Open 2026-06-02" })).toHaveTextContent("Low day");
+    expect(screen.getByRole("button", { name: "Open 2026-06-03" })).toHaveTextContent("Rest day");
+  });
+
+  it("supports individual dates and month view", async () => {
+    renderPlanner();
+
+    expect(await screen.findByRole("heading", { name: "Planner" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Setup plan" }));
+    fireEvent.change(screen.getByLabelText("Planner setup mode"), {
+      target: { value: "individualDates" },
+    });
+    fireEvent.change(screen.getByLabelText("Individual planner dates"), {
+      target: { value: "2026-07-04, 2026-07-05" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Apply setup" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Open 2026-07-04" })).toHaveTextContent(
+        "2026-07-04",
+      );
+    });
+    fireEvent.click(screen.getByRole("tab", { name: "Month" }));
+    expect(screen.getByRole("button", { name: "Open 2026-07-04" })).toHaveTextContent("2026-07-04");
+    expect(screen.getByRole("button", { name: "Open 2026-07-05" })).toHaveTextContent("2026-07-05");
   });
 
   it("shows loading and unavailable states", async () => {
@@ -200,3 +201,25 @@ describe("PlannerScreen", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Planner store unavailable");
   });
 });
+
+function renderPlanner({
+  onOpenRecipe = vi.fn(),
+}: {
+  onOpenRecipe?: (recipeId: string, servings: number, openCookMode: boolean) => void;
+} = {}) {
+  const recipeRepository = new InMemoryRecipeRepository([sampleRecipe]);
+  const recipeUseCases = createRecipeUseCases(recipeRepository);
+  const mealPlanUseCases = createMealPlanUseCases(
+    new InMemoryMealPlanRepository([samplePlan]),
+    recipeRepository,
+  );
+
+  return render(
+    <PlannerScreen
+      mealPlanUseCases={mealPlanUseCases}
+      onChanged={vi.fn()}
+      onOpenRecipe={onOpenRecipe}
+      recipeUseCases={recipeUseCases}
+    />,
+  );
+}

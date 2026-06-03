@@ -1,17 +1,15 @@
-import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 
 import { EmptyView, ErrorView, LoadingView } from "../../../core/presentation/StateViews";
-import type {
-  RecipePackExport,
-  RecipePackPreview,
-  RecipePackUseCases,
-} from "../application/recipePackUseCases";
+import type { RecipePackFileUseCases } from "../application/recipePackFileUseCases";
+import type { RecipePackPreview, RecipePackUseCases } from "../application/recipePackUseCases";
 import {
   initialRecipeTransferScreenState,
   type RecipeTransferScreenState,
 } from "./RecipeTransferState";
 
 type RecipeTransferScreenProps = {
+  recipePackFileUseCases?: RecipePackFileUseCases;
   recipePackUseCases: RecipePackUseCases;
   onImported: () => void;
   transferState?: RecipeTransferScreenState;
@@ -19,6 +17,7 @@ type RecipeTransferScreenProps = {
 };
 
 export function RecipeTransferScreen({
+  recipePackFileUseCases,
   recipePackUseCases,
   onImported,
   transferState,
@@ -30,6 +29,17 @@ export function RecipeTransferScreen({
   const state = transferState ?? internalState;
   const setState = onTransferStateChange ?? setInternalState;
   const aiPrompt = useMemo(() => recipePackUseCases.getAiPromptTemplate(), [recipePackUseCases]);
+  const aiPromptTextAreaRef = useRef<HTMLTextAreaElement>(null);
+  const exportJsonTextAreaRef = useRef<HTMLTextAreaElement>(null);
+  const [exportDownloadUrl, setExportDownloadUrl] = useState<string | null>(null);
+  const exportDownloadUrlRef = useRef<string | null>(null);
+  const [exportDownloadMessage, setExportDownloadMessage] = useState("");
+
+  useEffect(() => {
+    return () => {
+      revokeRecipePackDownloadUrl(exportDownloadUrlRef.current);
+    };
+  }, []);
 
   function updateState(nextState: Partial<RecipeTransferScreenState>) {
     setState((currentState) => ({
@@ -38,7 +48,15 @@ export function RecipeTransferScreen({
     }));
   }
 
+  function replaceExportDownloadUrl(nextUrl: string | null) {
+    revokeRecipePackDownloadUrl(exportDownloadUrlRef.current);
+    exportDownloadUrlRef.current = nextUrl;
+    setExportDownloadUrl(nextUrl);
+  }
+
   async function exportPack() {
+    replaceExportDownloadUrl(null);
+    setExportDownloadMessage("");
     updateState({ exportState: { status: "loading" } });
     const result = await recipePackUseCases.exportRecipePack();
 
@@ -47,7 +65,38 @@ export function RecipeTransferScreen({
       return;
     }
 
+    replaceExportDownloadUrl(createRecipePackDownloadUrl(result.value.json));
     updateState({ exportState: { status: "ready", pack: result.value } });
+  }
+
+  async function downloadExportPack() {
+    if (state.exportState.status !== "ready") {
+      return;
+    }
+
+    setExportDownloadMessage("");
+    const pack = state.exportState.pack;
+
+    if (!recipePackFileUseCases) {
+      exportJsonTextAreaRef.current?.focus();
+      exportJsonTextAreaRef.current?.select();
+      setExportDownloadMessage("Backup download is unavailable here. Backup JSON selected below.");
+      return;
+    }
+
+    const result = await recipePackFileUseCases.saveRecipePackFile({
+      pack,
+      downloadUrl: exportDownloadUrl ?? createRecipePackDataUrl(pack.json),
+    });
+
+    if (result.ok) {
+      setExportDownloadMessage(result.value.message);
+      return;
+    }
+
+    exportJsonTextAreaRef.current?.focus();
+    exportJsonTextAreaRef.current?.select();
+    setExportDownloadMessage(`${result.error.message} Backup JSON selected below.`);
   }
 
   function previewPack() {
@@ -99,13 +148,16 @@ export function RecipeTransferScreen({
   }
 
   async function copyAiPrompt() {
-    if (!navigator.clipboard) {
-      updateState({ promptCopyMessage: "Prompt is ready below." });
+    const copied = await copyTextToClipboard(aiPrompt);
+
+    if (copied) {
+      updateState({ promptCopyMessage: "Prompt copied." });
       return;
     }
 
-    await navigator.clipboard.writeText(aiPrompt);
-    updateState({ promptCopyMessage: "Prompt copied." });
+    aiPromptTextAreaRef.current?.focus();
+    aiPromptTextAreaRef.current?.select();
+    updateState({ promptCopyMessage: "Prompt selected below. Copy it manually." });
   }
 
   return (
@@ -149,7 +201,7 @@ export function RecipeTransferScreen({
           <div className="collection-editor__header">
             <div>
               <h3 id="export-pack-title">Export recipe pack</h3>
-              <p className="muted-text">Creates a private LaCucina backup file.</p>
+              <p className="muted-text">Creates a private Comero backup file.</p>
             </div>
             <button className="primary-button" type="button" onClick={exportPack}>
               Export
@@ -172,20 +224,22 @@ export function RecipeTransferScreen({
                 <button
                   className="primary-button"
                   type="button"
-                  onClick={() => {
-                    if (state.exportState.status === "ready") {
-                      downloadRecipePack(state.exportState.pack);
-                    }
-                  }}
+                  onClick={() => void downloadExportPack()}
                 >
                   Download file
                 </button>
               </div>
+              {exportDownloadMessage ? (
+                <div className="state-view" role="status">
+                  <p className="state-view__title">{exportDownloadMessage}</p>
+                </div>
+              ) : null}
               <label>
                 <span>Backup JSON</span>
                 <textarea
                   readOnly
                   aria-label="Exported recipe pack JSON"
+                  ref={exportJsonTextAreaRef}
                   value={state.exportState.pack.json}
                 />
               </label>
@@ -291,7 +345,12 @@ export function RecipeTransferScreen({
           ) : null}
           <label>
             <span>Prompt</span>
-            <textarea readOnly aria-label="AI recipe pack prompt" value={aiPrompt} />
+            <textarea
+              readOnly
+              aria-label="AI recipe pack prompt"
+              ref={aiPromptTextAreaRef}
+              value={aiPrompt}
+            />
           </label>
         </section>
       ) : null}
@@ -347,13 +406,59 @@ function ImportPreview({ preview }: { preview: RecipePackPreview }) {
   );
 }
 
-function downloadRecipePack(pack: RecipePackExport) {
-  const blob = new Blob([pack.json], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
+async function copyTextToClipboard(text: string) {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      // Some mobile webviews expose Clipboard API but reject writes without a clear permission UI.
+    }
+  }
 
-  link.href = url;
-  link.download = pack.fileName;
-  link.click();
-  URL.revokeObjectURL(url);
+  return copyTextWithLegacySelection(text);
+}
+
+function copyTextWithLegacySelection(text: string) {
+  const textArea = document.createElement("textarea");
+  const activeElement =
+    document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
+  textArea.value = text;
+  textArea.readOnly = true;
+  textArea.style.position = "fixed";
+  textArea.style.insetBlockStart = "0";
+  textArea.style.insetInlineStart = "-9999px";
+
+  try {
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    textArea.setSelectionRange(0, text.length);
+    return document.execCommand("copy");
+  } catch {
+    return false;
+  } finally {
+    textArea.remove();
+    activeElement?.focus();
+  }
+}
+
+function createRecipePackDownloadUrl(json: string) {
+  if (typeof URL.createObjectURL === "function") {
+    const blob = new Blob([json], { type: "application/json" });
+    return URL.createObjectURL(blob);
+  }
+
+  return createRecipePackDataUrl(json);
+}
+
+function createRecipePackDataUrl(json: string) {
+  return `data:application/json;charset=utf-8,${encodeURIComponent(json)}`;
+}
+
+function revokeRecipePackDownloadUrl(url: string | null) {
+  if (url?.startsWith("blob:") && typeof URL.revokeObjectURL === "function") {
+    URL.revokeObjectURL(url);
+  }
 }

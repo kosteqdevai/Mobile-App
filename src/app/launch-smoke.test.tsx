@@ -7,7 +7,7 @@ describe("launch smoke", () => {
   it("starts the app shell with an accessible root landmark", () => {
     render(<App />);
 
-    expect(screen.getByRole("main", { name: "LaCucina" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "LaCucina app shell" })).toBeInTheDocument();
+    expect(screen.getByRole("main", { name: "Comero" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Comero app shell" })).toBeInTheDocument();
   });
 });

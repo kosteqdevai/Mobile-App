@@ -94,6 +94,7 @@ export type Recipe = {
   isFavorite: boolean;
   isTemplate?: boolean;
   photo?: RecipePhoto;
+  archivedAt?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -121,6 +122,7 @@ export type RecipeInput = {
   isFavorite?: boolean;
   isTemplate?: boolean;
   photo?: RecipePhoto;
+  archivedAt?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -141,6 +143,7 @@ export type RecipeValidationErrorCode =
   | "recipe-allergen-invalid"
   | "recipe-dietary-flag-invalid"
   | "recipe-nutrition-invalid"
+  | "recipe-archived-date-invalid"
   | "recipe-date-required";
 
 export type RecipeValidationError = {
@@ -155,6 +158,8 @@ export function createRecipe(input: RecipeInput): Result<Recipe, RecipeValidatio
   if (errors.length > 0) {
     return err(errors);
   }
+
+  const archivedAt = normalizeArchivedAt(input.archivedAt);
 
   return ok({
     id: input.id.trim(),
@@ -186,6 +191,7 @@ export function createRecipe(input: RecipeInput): Result<Recipe, RecipeValidatio
     isFavorite: input.isFavorite ?? false,
     isTemplate: input.isTemplate ?? false,
     photo: input.photo,
+    ...(archivedAt ? { archivedAt } : {}),
     createdAt: input.createdAt.trim(),
     updatedAt: input.updatedAt.trim(),
   });
@@ -225,6 +231,12 @@ function validateRecipeInput(input: RecipeInput): RecipeValidationError[] {
   validateDietaryMetadata(input.dietary, errors);
   validateNutritionEstimate(input.nutrition, errors);
 
+  if (input.archivedAt !== undefined && input.archivedAt.trim().length === 0) {
+    errors.push(
+      validationError("recipe-archived-date-invalid", "Archived date is invalid.", "archivedAt"),
+    );
+  }
+
   if (input.createdAt.trim().length === 0) {
     errors.push(validationError("recipe-date-required", "Created date is required.", "createdAt"));
   }
@@ -234,6 +246,11 @@ function validateRecipeInput(input: RecipeInput): RecipeValidationError[] {
   }
 
   return errors;
+}
+
+function normalizeArchivedAt(archivedAt: string | undefined) {
+  const trimmedArchivedAt = archivedAt?.trim() ?? "";
+  return trimmedArchivedAt.length > 0 ? trimmedArchivedAt : undefined;
 }
 
 function validateIngredients(

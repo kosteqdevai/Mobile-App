@@ -1,7 +1,7 @@
 import { appEnvironment } from "./environment";
 
 export const appConfig = {
-  name: "LaCucina",
+  name: "Comero",
   stage: "Foundation",
   environment: appEnvironment,
 } as const;

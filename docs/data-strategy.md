@@ -1,6 +1,6 @@
 # Data Strategy
 
-LaCucina MVP uses local-only browser storage with no account, no backend, and no sync. Data belongs to the person using the local browser profile.
+Comero MVP uses local-only browser storage with no account, no backend, and no sync. Data belongs to the person using the local browser profile.
 
 ## Storage Stance
 
@@ -39,7 +39,7 @@ Deleting a recipe removes the recipe record and its app-managed local photo refe
 
 The MVP does not promise account-based recovery, cloud backup, or cross-device restore.
 
-Manual transfer between devices is supported through LaCucina Recipe Pack export/import. The pack is a private JSON backup for recipes only; imports create new local copies and do not overwrite existing records.
+Manual transfer between devices is supported through Comero Recipe Pack export/import. The pack is a private JSON backup for recipes only; imports create new local copies and do not overwrite existing records.
 
 ## Migration Baseline
 

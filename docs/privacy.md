@@ -1,6 +1,6 @@
 # Privacy Boundaries
 
-LaCucina MVP is a private, local-first cookbook. It should store user-created recipes, cookbook organization, meal plans, and optional local recipe photos only on the user's device/browser profile.
+Comero MVP is a private, local-first cookbook. It should store user-created recipes, cookbook organization, meal plans, and optional local recipe photos only on the user's device/browser profile.
 
 ## Privacy Defaults
 
@@ -31,7 +31,7 @@ Allergen, dietary, and nutrition metadata is informational only. The app must no
 
 ## Sharing Boundary
 
-Text export or native share sheet actions must be explicit. The app should show which recipe content is being exported. Sharing must not create public URLs, public recipe records, or remote copies managed by LaCucina.
+Text export or native share sheet actions must be explicit. The app should show which recipe content is being exported. Sharing must not create public URLs, public recipe records, or remote copies managed by Comero.
 
 ## Permission Boundary
 

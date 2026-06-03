@@ -122,6 +122,8 @@ type RecipeFormValues = {
   isFavorite: boolean;
   isTemplate: boolean;
   photoLocalId: string;
+  archivedAt: string;
+  createdAt: string;
 };
 
 const commonIngredientUnits = ingredientUnitOptions;
@@ -159,6 +161,7 @@ export function RecipeFormScreen({
     status: "loading",
   });
   const [selectedTemplateRecipeId, setSelectedTemplateRecipeId] = useState("");
+  const [isAdvancedOptionsOpen, setIsAdvancedOptionsOpen] = useState(mode === "edit");
 
   useEffect(() => {
     let cancelled = false;
@@ -228,6 +231,7 @@ export function RecipeFormScreen({
       }
 
       setFormState({ status: "ready", values: recipeToFormValues(result.value) });
+      setIsAdvancedOptionsOpen(true);
     }
 
     void loadRecipe();
@@ -781,14 +785,6 @@ export function RecipeFormScreen({
           />
         </label>
         <label>
-          <span>Description</span>
-          <textarea
-            aria-label="Recipe description"
-            value={formState.values.description}
-            onChange={(event) => updateValues({ description: event.target.value })}
-          />
-        </label>
-        <label>
           <span>Base servings</span>
           <input
             aria-label="Base servings"
@@ -845,92 +841,6 @@ export function RecipeFormScreen({
         ))}
       </section>
 
-      {mode === "create" ? (
-        <section className="collection-editor" aria-labelledby="template-import-title">
-          <div className="collection-editor__header">
-            <div>
-              <p className="section-kicker">Reusable prep</p>
-              <h3 id="template-import-title">Start from template recipe</h3>
-            </div>
-          </div>
-
-          {templateImportState.status === "loading" ? (
-            <div className="state-view" role="status">
-              <p className="state-view__title">Loading template recipes</p>
-            </div>
-          ) : null}
-
-          {templateImportState.status === "error" ? (
-            <ErrorView title="Template recipes unavailable" message={templateImportState.message} />
-          ) : null}
-
-          {templateImportState.status === "ready" && templateImportState.templates.length === 0 ? (
-            <EmptyView
-              title="No template recipes"
-              message="Mark a saved recipe as a template before importing repeated ingredients and steps."
-            />
-          ) : null}
-
-          {templateImportState.status === "ready" && availableTemplateRecipes.length > 0 ? (
-            <div className="form-grid">
-              <label>
-                <span>Template recipe</span>
-                <select
-                  aria-label="Template recipe to import"
-                  value={selectedTemplateRecipeId}
-                  onChange={(event) => setSelectedTemplateRecipeId(event.target.value)}
-                >
-                  {availableTemplateRecipes.map((template) => (
-                    <option key={template.id} value={template.id}>
-                      {template.title}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button
-                className="secondary-button"
-                type="button"
-                onClick={() => importSelectedTemplateRecipe()}
-              >
-                Import template recipe
-              </button>
-            </div>
-          ) : null}
-
-          {templateImportState.status === "ready" &&
-          templateImportState.templates.length > 0 &&
-          availableTemplateRecipes.length === 0 ? (
-            <p className="note-block">All available template recipes are already imported.</p>
-          ) : null}
-
-          {formState.values.importedTemplates.length > 0 ? (
-            <ul className="compact-list" aria-label="Imported template recipes">
-              {formState.values.importedTemplates.map((template) => (
-                <li key={template.id}>
-                  <span>
-                    <strong>{template.title}</strong>{" "}
-                    <span className="muted-text">
-                      imported as an independent copy
-                      {template.nutrition ? ` · ${nutritionSummaryText(template.nutrition)}` : ""}
-                    </span>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-
-          {templateImportState.status === "ready" && templateImportState.message ? (
-            <p className="note-block" role="status">
-              {templateImportState.message}
-            </p>
-          ) : null}
-
-          {templateImportState.status === "ready" && templateImportState.error ? (
-            <ErrorView title="Template import failed" message={templateImportState.error} />
-          ) : null}
-        </section>
-      ) : null}
-
       <section className="collection-editor" aria-labelledby="steps-form-title">
         <div className="collection-editor__header">
           <div>
@@ -976,324 +886,437 @@ export function RecipeFormScreen({
         ))}
       </section>
 
-      <div className="form-grid">
-        <label>
-          <span>Prep minutes</span>
-          <input
-            aria-label="Prep minutes"
-            min="0"
-            type="number"
-            value={formState.values.prepTimeMinutes}
-            onChange={(event) => updateValues({ prepTimeMinutes: Number(event.target.value) })}
-          />
-        </label>
-        <label>
-          <span>Cook minutes</span>
-          <input
-            aria-label="Cook minutes"
-            min="0"
-            type="number"
-            value={formState.values.cookTimeMinutes}
-            onChange={(event) => updateValues({ cookTimeMinutes: Number(event.target.value) })}
-          />
-        </label>
-        {categoryPickerState.status === "loading" ? (
-          <div className="state-view" role="status">
-            <p className="state-view__title">Loading categories</p>
-          </div>
-        ) : null}
-        {categoryPickerState.status === "error" ? (
-          <ErrorView title="Categories unavailable" message={categoryPickerState.message} />
-        ) : null}
-        {categoryPickerState.status === "ready" && categoryPickerState.options.length === 0 ? (
-          <EmptyView
-            title="No recipe categories"
-            message="Create a cookbook category before assigning this recipe."
-          />
-        ) : null}
-        {categoryPickerState.status === "ready" && categoryPickerState.options.length > 0 ? (
-          <label>
-            <span>Category</span>
-            <select
-              aria-label="Recipe category"
-              value={selectedCategoryOptionValue(formState.values, categoryPickerState.options)}
-              onChange={(event) => selectCategory(event.target.value)}
-            >
-              <option value="">Choose category</option>
-              {categoryPickerState.options.map((option) => (
-                <option key={categoryOptionValue(option)} value={categoryOptionValue(option)}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
-        <label>
-          <span>Tags</span>
-          <input
-            aria-label="Recipe tags"
-            value={formState.values.tags}
-            onChange={(event) => updateValues({ tags: event.target.value })}
-          />
-        </label>
-        <label>
-          <span>Photo reference</span>
-          <input
-            aria-label="Local photo reference"
-            value={formState.values.photoLocalId}
-            onChange={(event) => updateValues({ photoLocalId: event.target.value })}
-            placeholder="Optional local file reference"
-          />
-        </label>
-        <label>
-          <span>Difficulty</span>
-          <select
-            aria-label="Recipe difficulty"
-            value={formState.values.difficulty}
-            onChange={(event) =>
-              updateValues({ difficulty: event.target.value as RecipeDifficulty })
-            }
-          >
-            <option value="beginner">Beginner</option>
-            <option value="intermediate">Intermediate</option>
-          </select>
-        </label>
-        <label className="full-span">
-          <span>Recipe notes</span>
-          <textarea
-            aria-label="Recipe notes"
-            value={formState.values.notes}
-            onChange={(event) => updateValues({ notes: event.target.value })}
-          />
-        </label>
-      </div>
+      <details
+        className="advanced-recipe-details"
+        open={isAdvancedOptionsOpen}
+        onToggle={(event) => setIsAdvancedOptionsOpen(event.currentTarget.open)}
+      >
+        <summary>
+          <span>More recipe options</span>
+          <span className="muted-text">Templates, category, notes, allergens, nutrition</span>
+        </summary>
+        <div className="advanced-recipe-details__body">
+          {mode === "create" ? (
+            <section className="collection-editor" aria-labelledby="template-import-title">
+              <div className="collection-editor__header">
+                <div>
+                  <p className="section-kicker">Reusable prep</p>
+                  <h3 id="template-import-title">Start from template recipe</h3>
+                </div>
+              </div>
 
-      <section className="collection-editor" aria-labelledby="guidance-form-title">
-        <div className="collection-editor__header">
-          <div>
-            <p className="section-kicker">Planning guidance</p>
-            <h3 id="guidance-form-title">Storage and leftovers</h3>
-          </div>
-        </div>
-        <p className="muted-text">
-          User-entered notes only. Review freshness and safety before serving.
-        </p>
-        <div className="form-grid">
-          <label>
-            <span>Prep ahead</span>
-            <textarea
-              aria-label="Prep-ahead notes"
-              value={formState.values.guidance.prepAhead}
-              onChange={(event) => updateGuidance({ prepAhead: event.target.value })}
-            />
-          </label>
-          <label>
-            <span>Refrigerator storage</span>
-            <textarea
-              aria-label="Refrigerator storage"
-              value={formState.values.guidance.refrigeratorStorage}
-              onChange={(event) => updateGuidance({ refrigeratorStorage: event.target.value })}
-            />
-          </label>
-          <label>
-            <span>Freezer storage</span>
-            <textarea
-              aria-label="Freezer storage"
-              value={formState.values.guidance.freezerStorage}
-              onChange={(event) => updateGuidance({ freezerStorage: event.target.value })}
-            />
-          </label>
-          <label>
-            <span>Reheating</span>
-            <textarea
-              aria-label="Reheating notes"
-              value={formState.values.guidance.reheating}
-              onChange={(event) => updateGuidance({ reheating: event.target.value })}
-            />
-          </label>
-          <label>
-            <span>Holding</span>
-            <textarea
-              aria-label="Holding notes"
-              value={formState.values.guidance.holding}
-              onChange={(event) => updateGuidance({ holding: event.target.value })}
-            />
-          </label>
-          <label>
-            <span>Leftovers</span>
-            <textarea
-              aria-label="Leftover ideas"
-              value={formState.values.guidance.leftoverUse}
-              onChange={(event) => updateGuidance({ leftoverUse: event.target.value })}
-            />
-          </label>
-        </div>
-      </section>
+              {templateImportState.status === "loading" ? (
+                <div className="state-view" role="status">
+                  <p className="state-view__title">Loading template recipes</p>
+                </div>
+              ) : null}
 
-      <section className="collection-editor" aria-labelledby="dietary-form-title">
-        <div className="collection-editor__header">
-          <div>
-            <p className="section-kicker">Dietary context</p>
-            <h3 id="dietary-form-title">Allergen and dietary notes</h3>
-          </div>
-        </div>
-        <p className="muted-text">
-          User-entered warnings only. This does not guarantee a recipe is safe for an allergy or
-          diet.
-        </p>
-        <div className="allergen-table-wrap">
-          <table className="allergen-table">
-            <thead>
-              <tr>
-                <th scope="col">Allergen</th>
-                <th scope="col">Contains</th>
-              </tr>
-            </thead>
-            <tbody>
-              {allergenOptions.map((option) => {
-                const allergen = formState.values.dietary.allergens[option.value];
+              {templateImportState.status === "error" ? (
+                <ErrorView
+                  title="Template recipes unavailable"
+                  message={templateImportState.message}
+                />
+              ) : null}
 
-                return (
-                  <tr key={option.value}>
-                    <th scope="row">{option.label}</th>
-                    <td>
-                      <input
-                        aria-label={`${option.label} allergen`}
-                        checked={allergen.status === "contains"}
-                        type="checkbox"
-                        onChange={(event) =>
-                          updateAllergen(option.value, {
-                            status: event.target.checked ? "contains" : "unverified",
-                          })
-                        }
-                      />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </section>
+              {templateImportState.status === "ready" &&
+              templateImportState.templates.length === 0 ? (
+                <EmptyView
+                  title="No template recipes"
+                  message="Mark a saved recipe as a template before importing repeated ingredients and steps."
+                />
+              ) : null}
 
-      <section className="collection-editor" aria-labelledby="nutrition-form-title">
-        <div className="collection-editor__header">
-          <div>
-            <p className="section-kicker">Nutrition</p>
-            <h3 id="nutrition-form-title">Manual estimates</h3>
-          </div>
-        </div>
-        <p className="muted-text">
-          Optional manual estimates for the whole recipe. These are not clinical recommendations.
-        </p>
-        {formState.values.importedTemplates.length > 0 ? (
-          <div className="template-nutrition-panel" aria-label="Template nutrition subtotal">
-            <h4>Template nutrition</h4>
-            <ul className="compact-list">
-              {formState.values.importedTemplates.map((template) => (
-                <li key={template.id}>
-                  <span>
-                    <strong>{template.title}</strong>{" "}
-                    <span className="muted-text">
-                      {template.nutrition
-                        ? nutritionSummaryText(template.nutrition)
-                        : "No manual nutrition on this template."}
-                    </span>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-        <div className="nutrition-grid">
-          {nutritionMetricDefinitions.map((definition) => {
-            const nutrition = formState.values.nutrition[definition.metric];
-
-            return (
-              <fieldset className="collection-row" key={definition.metric}>
-                <legend>{definition.label}</legend>
+              {templateImportState.status === "ready" && availableTemplateRecipes.length > 0 ? (
                 <div className="form-grid">
                   <label>
-                    <span>Amount ({definition.unit})</span>
-                    <input
-                      aria-label={`${definition.label} amount`}
-                      min="0"
-                      step="0.1"
-                      type="number"
-                      value={nutrition.amount}
-                      onChange={(event) =>
-                        updateNutrition(definition.metric, { amount: event.target.value })
-                      }
-                    />
+                    <span>Template recipe</span>
+                    <select
+                      aria-label="Template recipe to import"
+                      value={selectedTemplateRecipeId}
+                      onChange={(event) => setSelectedTemplateRecipeId(event.target.value)}
+                    >
+                      {availableTemplateRecipes.map((template) => (
+                        <option key={template.id} value={template.id}>
+                          {template.title}
+                        </option>
+                      ))}
+                    </select>
                   </label>
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    onClick={() => importSelectedTemplateRecipe()}
+                  >
+                    Import template recipe
+                  </button>
                 </div>
-              </fieldset>
-            );
-          })}
-        </div>
-        <div className="nutrition-summary-wrap">
-          <table className="nutrition-summary-table" aria-label="Nutrition totals">
-            <thead>
-              <tr>
-                <th scope="col">Metric</th>
-                <th scope="col">From templates</th>
-                <th scope="col">Added now</th>
-                <th scope="col">Total</th>
-                <th scope="col">Per serving</th>
-              </tr>
-            </thead>
-            <tbody>
+              ) : null}
+
+              {templateImportState.status === "ready" &&
+              templateImportState.templates.length > 0 &&
+              availableTemplateRecipes.length === 0 ? (
+                <p className="note-block">All available template recipes are already imported.</p>
+              ) : null}
+
+              {formState.values.importedTemplates.length > 0 ? (
+                <ul className="compact-list" aria-label="Imported template recipes">
+                  {formState.values.importedTemplates.map((template) => (
+                    <li key={template.id}>
+                      <span>
+                        <strong>{template.title}</strong>{" "}
+                        <span className="muted-text">
+                          imported as an independent copy
+                          {template.nutrition
+                            ? ` - ${nutritionSummaryText(template.nutrition)}`
+                            : ""}
+                        </span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+
+              {templateImportState.status === "ready" && templateImportState.message ? (
+                <p className="note-block" role="status">
+                  {templateImportState.message}
+                </p>
+              ) : null}
+
+              {templateImportState.status === "ready" && templateImportState.error ? (
+                <ErrorView title="Template import failed" message={templateImportState.error} />
+              ) : null}
+            </section>
+          ) : null}
+
+          <div className="form-grid">
+            <label className="full-span">
+              <span>Description</span>
+              <textarea
+                aria-label="Recipe description"
+                value={formState.values.description}
+                onChange={(event) => updateValues({ description: event.target.value })}
+              />
+            </label>
+            <label>
+              <span>Prep minutes</span>
+              <input
+                aria-label="Prep minutes"
+                min="0"
+                type="number"
+                value={formState.values.prepTimeMinutes}
+                onChange={(event) => updateValues({ prepTimeMinutes: Number(event.target.value) })}
+              />
+            </label>
+            <label>
+              <span>Cook minutes</span>
+              <input
+                aria-label="Cook minutes"
+                min="0"
+                type="number"
+                value={formState.values.cookTimeMinutes}
+                onChange={(event) => updateValues({ cookTimeMinutes: Number(event.target.value) })}
+              />
+            </label>
+            {categoryPickerState.status === "loading" ? (
+              <div className="state-view" role="status">
+                <p className="state-view__title">Loading categories</p>
+              </div>
+            ) : null}
+            {categoryPickerState.status === "error" ? (
+              <ErrorView title="Categories unavailable" message={categoryPickerState.message} />
+            ) : null}
+            {categoryPickerState.status === "ready" && categoryPickerState.options.length === 0 ? (
+              <EmptyView
+                title="No recipe categories"
+                message="Create a cookbook category before assigning this recipe."
+              />
+            ) : null}
+            {categoryPickerState.status === "ready" && categoryPickerState.options.length > 0 ? (
+              <label>
+                <span>Category</span>
+                <select
+                  aria-label="Recipe category"
+                  value={selectedCategoryOptionValue(formState.values, categoryPickerState.options)}
+                  onChange={(event) => selectCategory(event.target.value)}
+                >
+                  <option value="">Choose category</option>
+                  {categoryPickerState.options.map((option) => (
+                    <option key={categoryOptionValue(option)} value={categoryOptionValue(option)}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            <label>
+              <span>Tags</span>
+              <input
+                aria-label="Recipe tags"
+                value={formState.values.tags}
+                onChange={(event) => updateValues({ tags: event.target.value })}
+              />
+            </label>
+            <label>
+              <span>Photo reference</span>
+              <input
+                aria-label="Local photo reference"
+                value={formState.values.photoLocalId}
+                onChange={(event) => updateValues({ photoLocalId: event.target.value })}
+                placeholder="Optional local file reference"
+              />
+            </label>
+            <label>
+              <span>Difficulty</span>
+              <select
+                aria-label="Recipe difficulty"
+                value={formState.values.difficulty}
+                onChange={(event) =>
+                  updateValues({ difficulty: event.target.value as RecipeDifficulty })
+                }
+              >
+                <option value="beginner">Beginner</option>
+                <option value="intermediate">Intermediate</option>
+              </select>
+            </label>
+            <label className="full-span">
+              <span>Recipe notes</span>
+              <textarea
+                aria-label="Recipe notes"
+                value={formState.values.notes}
+                onChange={(event) => updateValues({ notes: event.target.value })}
+              />
+            </label>
+          </div>
+
+          <section className="collection-editor" aria-labelledby="guidance-form-title">
+            <div className="collection-editor__header">
+              <div>
+                <p className="section-kicker">Planning guidance</p>
+                <h3 id="guidance-form-title">Storage and leftovers</h3>
+              </div>
+            </div>
+            <p className="muted-text">
+              User-entered notes only. Review freshness and safety before serving.
+            </p>
+            <div className="form-grid">
+              <label>
+                <span>Prep ahead</span>
+                <textarea
+                  aria-label="Prep-ahead notes"
+                  value={formState.values.guidance.prepAhead}
+                  onChange={(event) => updateGuidance({ prepAhead: event.target.value })}
+                />
+              </label>
+              <label>
+                <span>Refrigerator storage</span>
+                <textarea
+                  aria-label="Refrigerator storage"
+                  value={formState.values.guidance.refrigeratorStorage}
+                  onChange={(event) => updateGuidance({ refrigeratorStorage: event.target.value })}
+                />
+              </label>
+              <label>
+                <span>Freezer storage</span>
+                <textarea
+                  aria-label="Freezer storage"
+                  value={formState.values.guidance.freezerStorage}
+                  onChange={(event) => updateGuidance({ freezerStorage: event.target.value })}
+                />
+              </label>
+              <label>
+                <span>Reheating</span>
+                <textarea
+                  aria-label="Reheating notes"
+                  value={formState.values.guidance.reheating}
+                  onChange={(event) => updateGuidance({ reheating: event.target.value })}
+                />
+              </label>
+              <label>
+                <span>Holding</span>
+                <textarea
+                  aria-label="Holding notes"
+                  value={formState.values.guidance.holding}
+                  onChange={(event) => updateGuidance({ holding: event.target.value })}
+                />
+              </label>
+              <label>
+                <span>Leftovers</span>
+                <textarea
+                  aria-label="Leftover ideas"
+                  value={formState.values.guidance.leftoverUse}
+                  onChange={(event) => updateGuidance({ leftoverUse: event.target.value })}
+                />
+              </label>
+            </div>
+          </section>
+
+          <section className="collection-editor" aria-labelledby="dietary-form-title">
+            <div className="collection-editor__header">
+              <div>
+                <p className="section-kicker">Dietary context</p>
+                <h3 id="dietary-form-title">Allergen and dietary notes</h3>
+              </div>
+            </div>
+            <p className="muted-text">
+              User-entered warnings only. This does not guarantee a recipe is safe for an allergy or
+              diet.
+            </p>
+            <div className="allergen-table-wrap">
+              <table className="allergen-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Allergen</th>
+                    <th scope="col">Contains</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {allergenOptions.map((option) => {
+                    const allergen = formState.values.dietary.allergens[option.value];
+
+                    return (
+                      <tr key={option.value}>
+                        <th scope="row">{option.label}</th>
+                        <td>
+                          <input
+                            aria-label={`${option.label} allergen`}
+                            checked={allergen.status === "contains"}
+                            type="checkbox"
+                            onChange={(event) =>
+                              updateAllergen(option.value, {
+                                status: event.target.checked ? "contains" : "unverified",
+                              })
+                            }
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section className="collection-editor" aria-labelledby="nutrition-form-title">
+            <div className="collection-editor__header">
+              <div>
+                <p className="section-kicker">Nutrition</p>
+                <h3 id="nutrition-form-title">Manual estimates</h3>
+              </div>
+            </div>
+            <p className="muted-text">
+              Optional manual estimates for the whole recipe. These are not clinical
+              recommendations.
+            </p>
+            {formState.values.importedTemplates.length > 0 ? (
+              <div className="template-nutrition-panel" aria-label="Template nutrition subtotal">
+                <h4>Template nutrition</h4>
+                <ul className="compact-list">
+                  {formState.values.importedTemplates.map((template) => (
+                    <li key={template.id}>
+                      <span>
+                        <strong>{template.title}</strong>{" "}
+                        <span className="muted-text">
+                          {template.nutrition
+                            ? nutritionSummaryText(template.nutrition)
+                            : "No manual nutrition on this template."}
+                        </span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            <div className="nutrition-grid">
               {nutritionMetricDefinitions.map((definition) => {
-                const templateAmount = templateNutritionTotals[definition.metric];
-                const manualAmount = manualNutritionTotals[definition.metric];
-                const totalAmount = totalNutrition[definition.metric];
-                const perServingAmount =
-                  formState.values.baseServings > 0
-                    ? totalAmount / formState.values.baseServings
-                    : 0;
+                const nutrition = formState.values.nutrition[definition.metric];
 
                 return (
-                  <tr key={definition.metric}>
-                    <th scope="row">{definition.label}</th>
-                    <td>
-                      {formatNutritionAmount(templateAmount)} {definition.unit}
-                    </td>
-                    <td>
-                      {formatNutritionAmount(manualAmount)} {definition.unit}
-                    </td>
-                    <td>
-                      {formatNutritionAmount(totalAmount)} {definition.unit}
-                    </td>
-                    <td>
-                      {formatNutritionAmount(perServingAmount)} {definition.unit}
-                    </td>
-                  </tr>
+                  <fieldset className="collection-row" key={definition.metric}>
+                    <legend>{definition.label}</legend>
+                    <div className="form-grid">
+                      <label>
+                        <span>Amount ({definition.unit})</span>
+                        <input
+                          aria-label={`${definition.label} amount`}
+                          min="0"
+                          step="0.1"
+                          type="number"
+                          value={nutrition.amount}
+                          onChange={(event) =>
+                            updateNutrition(definition.metric, { amount: event.target.value })
+                          }
+                        />
+                      </label>
+                    </div>
+                  </fieldset>
                 );
               })}
-            </tbody>
-          </table>
-        </div>
-      </section>
+            </div>
+            <div className="nutrition-summary-wrap">
+              <table className="nutrition-summary-table" aria-label="Nutrition totals">
+                <thead>
+                  <tr>
+                    <th scope="col">Metric</th>
+                    <th scope="col">From templates</th>
+                    <th scope="col">Added now</th>
+                    <th scope="col">Total</th>
+                    <th scope="col">Per serving</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {nutritionMetricDefinitions.map((definition) => {
+                    const templateAmount = templateNutritionTotals[definition.metric];
+                    const manualAmount = manualNutritionTotals[definition.metric];
+                    const totalAmount = totalNutrition[definition.metric];
+                    const perServingAmount =
+                      formState.values.baseServings > 0
+                        ? totalAmount / formState.values.baseServings
+                        : 0;
 
-      <div className="form-grid">
-        <label className="checkbox-row">
-          <input
-            checked={formState.values.isFavorite}
-            onChange={(event) => updateValues({ isFavorite: event.target.checked })}
-            type="checkbox"
-          />
-          Favorite
-        </label>
-        <label className="checkbox-row">
-          <input
-            aria-label="Template recipe"
-            checked={formState.values.isTemplate}
-            onChange={(event) => updateValues({ isTemplate: event.target.checked })}
-            type="checkbox"
-          />
-          Template recipe?
-        </label>
-      </div>
+                    return (
+                      <tr key={definition.metric}>
+                        <th scope="row">{definition.label}</th>
+                        <td>
+                          {formatNutritionAmount(templateAmount)} {definition.unit}
+                        </td>
+                        <td>
+                          {formatNutritionAmount(manualAmount)} {definition.unit}
+                        </td>
+                        <td>
+                          {formatNutritionAmount(totalAmount)} {definition.unit}
+                        </td>
+                        <td>
+                          {formatNutritionAmount(perServingAmount)} {definition.unit}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <div className="form-grid">
+            <label className="checkbox-row">
+              <input
+                checked={formState.values.isFavorite}
+                onChange={(event) => updateValues({ isFavorite: event.target.checked })}
+                type="checkbox"
+              />
+              Favorite
+            </label>
+            <label className="checkbox-row">
+              <input
+                aria-label="Template recipe"
+                checked={formState.values.isTemplate}
+                onChange={(event) => updateValues({ isTemplate: event.target.checked })}
+                type="checkbox"
+              />
+              Template recipe?
+            </label>
+          </div>
+        </div>
+      </details>
 
       <div className="action-row">
         <button className="primary-button" type="button" onClick={() => void saveRecipe()}>
@@ -1332,6 +1355,8 @@ function createEmptyValues(): RecipeFormValues {
     isFavorite: false,
     isTemplate: false,
     photoLocalId: "",
+    archivedAt: "",
+    createdAt: "",
   };
 }
 
@@ -1364,6 +1389,8 @@ function recipeToFormValues(recipe: Recipe): RecipeFormValues {
     isFavorite: recipe.isFavorite,
     isTemplate: Boolean(recipe.isTemplate),
     photoLocalId: recipe.photo?.localId ?? "",
+    archivedAt: recipe.archivedAt ?? "",
+    createdAt: recipe.createdAt,
   };
 }
 
@@ -1415,7 +1442,8 @@ function formValuesToInput(values: RecipeFormValues, recipeId?: string): RecipeI
     isTemplate: values.isTemplate,
     photo:
       values.photoLocalId.trim().length > 0 ? { localId: values.photoLocalId.trim() } : undefined,
-    createdAt: now,
+    archivedAt: optionalText(values.archivedAt),
+    createdAt: recipeId ? values.createdAt || now : now,
     updatedAt: now,
   };
 }

@@ -1,18 +1,23 @@
 # Import and Export
 
-LaCucina uses a private JSON recipe pack for backup, device transfer, and AI-assisted bulk recipe creation.
+Comero uses a private JSON recipe pack for backup, device transfer, and AI-assisted bulk recipe creation.
 
 ## User-Facing Model
 
-The UI should call the file a LaCucina backup or recipe pack. Users should not need to edit JSON by hand.
+The UI should call the file a Comero backup or recipe pack. Users should not need to edit JSON by hand.
 
 Primary flows:
 
 - Export all recipes to a `.json` recipe pack.
+- In the Android app, save/share the exported pack through the system chooser instead of relying on WebView blob downloads.
 - Import a recipe pack from pasted text or a selected file.
 - Preview valid and invalid recipes before saving.
 - Import valid recipes as new private copies.
-- Copy an AI prompt/template that asks for LaCucina-compatible recipe pack JSON.
+- Copy an AI prompt/template that asks for Comero-compatible recipe pack JSON.
+
+## Mobile Export Behavior
+
+Desktop browsers can download the exported pack as a normal `.json` file. Capacitor Android WebView does not reliably honor `blob:` links with the `download` attribute, so the installed app writes the generated JSON pack to the app cache and opens Android's save/share options for that file. If native sharing or browser download is unavailable, the UI copies the JSON to the clipboard when possible; otherwise it selects the visible Backup JSON text area for manual copying.
 
 ## Format
 
@@ -27,7 +32,9 @@ The current format is:
 }
 ```
 
-Recipes in a pack may include normal LaCucina recipe fields. Import generates fresh local IDs and timestamps so an imported recipe never overwrites an existing one.
+Recipes in a pack may include normal Comero recipe fields. Import generates fresh local IDs and timestamps so an imported recipe never overwrites an existing one.
+
+Compatibility note: the JSON `format` identifier remains `lacucina.recipe-pack` so existing backups keep importing after the Comero rebrand.
 
 The importer is intentionally forgiving for common AI output:
 

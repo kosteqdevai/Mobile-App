@@ -24,6 +24,12 @@ STACK_RULE: Use the existing repository stack if one is already present. If no s
 9. Every user-facing flow must consider small phone screens, safe areas, keyboard behavior, accessibility labels, and readable touch targets.
 10. Do not add monetization, analytics, tracking, push notifications, camera, location, payments, or AI integrations unless PROJECT.md or a DECISION explicitly requires them.
 
+## Tooling guardrails
+
+- Do not request or hardcode `gpt-image-2`. It is not an available OpenAI image model and can make Codex/API requests fail with `invalid_value` on `tools`.
+- If generated bitmap assets are needed, use the available image generation tool without naming an unavailable model. For direct OpenAI API image calls, use a documented image model such as `gpt-image-1.5`, `gpt-image-1`, or `gpt-image-1-mini`.
+- This tooling rule does not authorize app-level AI/image-generation integrations. Those still require PROJECT.md or a resolved DECISION.
+
 ---
 
 ## Step 0 — Bootstrap check (run once, on first task only)

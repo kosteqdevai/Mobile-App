@@ -12,6 +12,10 @@ const recipeUseCases: RecipeUseCases = {
   createRecipe: vi.fn(),
   updateRecipe: vi.fn(),
   deleteRecipe: vi.fn(),
+  deleteRecipes: vi.fn(),
+  archiveRecipe: vi.fn(),
+  archiveRecipes: vi.fn(),
+  restoreRecipe: vi.fn(),
   listRecipes: vi.fn(),
   getRecipeDetails: vi.fn(async () =>
     ok({
@@ -71,7 +75,7 @@ describe("recipe export use cases", () => {
       expect(result.value.text).toContain("Storage and leftovers:");
       expect(result.value.text).toContain("- Prep ahead: Make sauce up to one day ahead.");
       expect(result.value.text).toContain("User-entered guidance");
-      expect(result.value.text).toContain("Private LaCucina text export");
+      expect(result.value.text).toContain("Private Comero text export");
       expect(result.value.text).not.toContain("http");
     }
   });

@@ -84,32 +84,35 @@ describe("MVP flow integration", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Planner" }));
     expect(await screen.findByRole("heading", { name: "Planner" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Setup plan" }));
 
     const option = screen.getAllByRole("option", { name: "Garlic soup" })[0] as HTMLOptionElement;
-    fireEvent.change(screen.getByLabelText("Board recipe for Training Day"), {
+    fireEvent.change(screen.getByLabelText("Setup recipe for Training Day"), {
       target: { value: option.value },
     });
-    fireEvent.change(screen.getByLabelText("Board servings for Training Day"), {
+    fireEvent.change(screen.getByLabelText("Setup new servings for Training Day"), {
       target: { value: "4" },
     });
     fireEvent.click(
-      within(screen.getByRole("region", { name: "Training Day" })).getByRole("button", {
-        name: "Add to board",
+      within(screen.getAllByRole("region", { name: "Training Day" })[0]).getByRole("button", {
+        name: "Add meal",
       }),
     );
 
-    expect(await screen.findByLabelText("Board servings for Garlic soup")).toHaveValue(4);
-    expect(screen.getByText(/Nutrition: Calories 600 kcal .* Protein 24 g/i)).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Move Garlic soup to day"), {
-      target: { value: "day-rest" },
+    fireEvent.click(screen.getByRole("button", { name: "Open 2026-05-22" }));
+    expect(await screen.findByLabelText("Date servings for Garlic soup")).toHaveValue(4);
+    expect(screen.getAllByText(/Calories 600 kcal/i).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByLabelText("Mark Garlic soup eaten on 2026-05-22"));
+    await waitFor(() => {
+      expect(screen.getByRole("region", { name: "Eaten" })).toHaveTextContent(/Protein 24 g/i);
     });
-    fireEvent.change(screen.getByLabelText("Move Garlic soup to slot"), {
-      target: { value: "slot-dinner" },
+    fireEvent.change(screen.getByLabelText("Date servings for Garlic soup"), {
+      target: { value: "3" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Move Garlic soup board entry" }));
-
-    const restDay = await screen.findByRole("region", { name: "Non-training Day" });
-    expect(within(restDay).getByLabelText("Board servings for Garlic soup")).toHaveValue(4);
+    fireEvent.click(screen.getByRole("button", { name: "Save Garlic soup date servings" }));
+    await waitFor(() => {
+      expect(screen.getByRole("region", { name: "Eaten" })).toHaveTextContent(/Calories 450 kcal/i);
+    });
 
     view.unmount();
     renderPersistedApp(storage, database);
@@ -122,10 +125,9 @@ describe("MVP flow integration", () => {
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Planner" }));
-    const persistedRestDay = await screen.findByRole("region", { name: "Non-training Day" });
-    expect(within(persistedRestDay).getByLabelText("Board servings for Garlic soup")).toHaveValue(
-      4,
-    );
+    fireEvent.click(await screen.findByRole("button", { name: "Open 2026-05-22" }));
+    expect(await screen.findByLabelText("Date servings for Garlic soup")).toHaveValue(3);
+    expect(screen.getByLabelText("Mark Garlic soup eaten on 2026-05-22")).toBeChecked();
   });
 
   it("saves a template recipe and imports it into a new recipe", async () => {
@@ -223,5 +225,50 @@ describe("MVP flow integration", () => {
 
     expect(await screen.findByRole("button", { name: /Imported chili/i })).toBeInTheDocument();
     expect(screen.getByText("Template recipe")).toBeInTheDocument();
+  });
+
+  it("exports the current persisted recipes after adding a new recipe", async () => {
+    const storage = new MemoryKeyValueStore();
+    const database = new MemoryLocalDatabase();
+    renderPersistedApp(storage, database);
+
+    expect(await screen.findByRole("heading", { name: "Recipes" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Backup" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Export" }));
+    fireEvent.click(screen.getByRole("button", { name: "Export" }));
+    expect(await screen.findByText(/1 recipes ready/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Recipes" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add recipe" }));
+    fireEvent.change(screen.getByLabelText("Recipe title"), {
+      target: { value: "Fresh stew" },
+    });
+    fireEvent.change(screen.getByLabelText("Ingredient 1 name"), {
+      target: { value: "Carrot" },
+    });
+    fireEvent.change(screen.getByLabelText("Ingredient 1 quantity"), {
+      target: { value: "2" },
+    });
+    fireEvent.change(screen.getByLabelText("Ingredient 1 unit"), {
+      target: { value: "piece" },
+    });
+    fireEvent.change(screen.getByLabelText("Step 1 text"), {
+      target: { value: "Simmer until tender." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save recipe" }));
+
+    expect(await screen.findByRole("heading", { name: "Fresh stew" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Backup" }));
+    expect(screen.queryByText(/1 recipes ready/)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Export" }));
+    expect(await screen.findByText(/2 recipes ready/)).toBeInTheDocument();
+
+    const exportedPack = JSON.parse(
+      (screen.getByLabelText("Exported recipe pack JSON") as HTMLTextAreaElement).value,
+    ) as { recipes: ReadonlyArray<{ title: string }> };
+    expect(exportedPack.recipes.map((recipe) => recipe.title)).toEqual(
+      expect.arrayContaining(["Tomato rice", "Fresh stew"]),
+    );
   });
 });

@@ -34,4 +34,76 @@ describe("meal plan data contracts", () => {
     await repository.delete("plan-1");
     expect(await repository.list()).toEqual([]);
   });
+
+  it("preserves schedule date states through repository reload", async () => {
+    const repository = new InMemoryMealPlanRepository();
+    const scheduledPlan: MealPlan = {
+      ...plan,
+      schedule: {
+        mode: "weekly",
+        startDate: "2026-05-25",
+        days: [
+          {
+            id: "schedule-day-monday-1",
+            label: "Monday",
+            targets: { calories: 1000 },
+            entries: [
+              {
+                id: "schedule-entry-1",
+                recipeId: "recipe-1",
+                servings: 2,
+                slotLabel: "Lunch",
+                context: "eat",
+              },
+            ],
+          },
+        ],
+      },
+      dateStates: [
+        {
+          date: "2026-05-25",
+          eatenEntryIds: ["schedule-entry-1"],
+          servingOverrides: [{ entryId: "schedule-entry-1", servings: 3 }],
+        },
+      ],
+    };
+
+    await repository.save(scheduledPlan);
+
+    expect(await repository.getById("plan-1")).toEqual(normalizeMealPlan(scheduledPlan));
+  });
+
+  it("maps legacy board-only records into schedules", () => {
+    const record = mealPlanToRecord({
+      ...plan,
+      board: {
+        preset: "weekly",
+        startDate: "2026-05-25",
+        slotTemplates: [{ id: "slot-dinner", label: "Dinner" }],
+        days: [
+          {
+            id: "board-day-monday-1",
+            label: "Monday",
+            date: "2026-05-25",
+            entries: [
+              {
+                id: "board-entry-1",
+                recipeId: "recipe-1",
+                servings: 2,
+                slotId: "slot-dinner",
+              },
+            ],
+          },
+        ],
+      },
+    });
+    const legacyRecord = { ...record, schedule: undefined };
+
+    const restored = mealPlanFromRecord(legacyRecord);
+
+    expect(restored.schedule).toMatchObject({
+      mode: "weekly",
+      days: [{ id: "board-day-monday-1", entries: [{ id: "board-entry-1" }] }],
+    });
+  });
 });

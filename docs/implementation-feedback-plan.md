@@ -1,10 +1,10 @@
-# LaCucina Implementation Feedback Plan
+# Comero Implementation Feedback Plan
 
-This plan converts `implementation feedback.md` into the next local-first build direction for LaCucina. It preserves the current MVP boundary: private personal cookbook, web-first testing, local-only storage, no accounts, no public platform, and no medical claims.
+This plan converts `implementation feedback.md` into the next local-first build direction for Comero. It preserves the current MVP boundary: private personal cookbook, web-first testing, local-only storage, no accounts, no public platform, and no medical claims.
 
 ## Product Direction
 
-LaCucina should move from a simple private recipe notebook toward a local-first kitchen assistant:
+Comero should move from a simple private recipe notebook toward a local-first kitchen assistant:
 
 ```text
 capture recipe

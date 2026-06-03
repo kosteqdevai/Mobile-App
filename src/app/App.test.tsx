@@ -11,7 +11,8 @@ describe("App", () => {
     render(<App />);
 
     expect(screen.getByRole("main")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "LaCucina" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Comero" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Comero logo" })).toBeInTheDocument();
     expect(screen.getByText("Foundation")).toBeInTheDocument();
     expect(screen.getByText("Personal cookbook")).toBeInTheDocument();
   });

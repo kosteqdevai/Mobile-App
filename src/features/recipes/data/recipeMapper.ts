@@ -17,13 +17,18 @@ export function recipeFromRecord(record: RecipeRecord): Recipe {
   const recipe = structuredClone(record) as Recipe & {
     dietary?: unknown;
     nutrition?: unknown;
+    archivedAt?: unknown;
   };
+  const { archivedAt: rawArchivedAt, ...recipeWithoutArchivedAt } = recipe;
+
+  const archivedAt = normalizeOptionalText(rawArchivedAt);
 
   return {
-    ...recipe,
+    ...recipeWithoutArchivedAt,
     dietary: normalizeDietaryRecord(recipe.dietary),
     nutrition: normalizeNutritionRecord(recipe.nutrition),
     isTemplate: recipe.isTemplate === true,
+    ...(archivedAt ? { archivedAt } : {}),
   };
 }
 
@@ -110,4 +115,8 @@ function normalizeNutritionRecord(nutrition: unknown): RecipeNutritionEstimate |
 
 function isObjectRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+function normalizeOptionalText(value: unknown) {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
 }

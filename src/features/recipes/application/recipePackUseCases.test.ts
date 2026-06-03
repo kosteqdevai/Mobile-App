@@ -41,6 +41,10 @@ function createRecipeUseCases(overrides: Partial<RecipeUseCases> = {}): RecipeUs
     ),
     updateRecipe: vi.fn(),
     deleteRecipe: vi.fn(),
+    deleteRecipes: vi.fn(),
+    archiveRecipe: vi.fn(),
+    archiveRecipes: vi.fn(),
+    restoreRecipe: vi.fn(),
     getRecipeDetails: vi.fn(),
     listRecipes: vi.fn(async () => ok([sampleRecipe])),
     previewPortions: vi.fn(),
@@ -52,7 +56,7 @@ const fixedNow = () => new Date("2026-05-24T12:00:00.000Z");
 const fixedId = ({ index }: { index: number }) => `recipe-import-${index + 1}`;
 
 describe("recipe pack use cases", () => {
-  it("exports all recipes as a LaCucina recipe pack", async () => {
+  it("exports all recipes as a Comero recipe pack", async () => {
     const useCases = createRecipePackUseCases(createRecipeUseCases(), {
       now: fixedNow,
       createId: fixedId,
@@ -62,7 +66,7 @@ describe("recipe pack use cases", () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value.fileName).toBe("lacucina-recipes-2026-05-24.json");
+      expect(result.value.fileName).toBe("comero-recipes-2026-05-24.json");
       expect(result.value.recipeCount).toBe(1);
 
       const parsed = JSON.parse(result.value.json);
