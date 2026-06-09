@@ -5,6 +5,7 @@ import type { RecipePackFileUseCases } from "../application/recipePackFileUseCas
 import type { RecipePackPreview, RecipePackUseCases } from "../application/recipePackUseCases";
 import {
   initialRecipeTransferScreenState,
+  type RecipeTransferImportState,
   type RecipeTransferScreenState,
 } from "./RecipeTransferState";
 
@@ -118,7 +119,14 @@ export function RecipeTransferScreen({
 
   async function importPack() {
     updateState({ importState: { status: "loading" } });
-    const result = await recipePackUseCases.importRecipePack(state.packText);
+    const result = state.createCookbookForImport
+      ? await recipePackUseCases.importRecipePack(state.packText, {
+          destination: {
+            type: "new-cookbook",
+            cookbookName: state.importCookbookName,
+          },
+        })
+      : await recipePackUseCases.importRecipePack(state.packText);
 
     if (!result.ok) {
       updateState({ importState: { status: "error", message: result.error.message } });
@@ -128,7 +136,11 @@ export function RecipeTransferScreen({
     updateState({
       importState: {
         status: "ready",
-        message: `Imported ${result.value.importedCount} recipes. Skipped ${result.value.skippedCount}.`,
+        message: `Imported ${result.value.importedCount} recipes to ${result.value.destinationLabel}. Skipped ${result.value.skippedCount}.`,
+        importedCount: result.value.importedCount,
+        skippedCount: result.value.skippedCount,
+        destinationLabel: result.value.destinationLabel,
+        importedTitles: result.value.importedTitles,
       },
     });
     onImported();
@@ -285,12 +297,48 @@ export function RecipeTransferScreen({
             />
           </label>
 
+          <div className="collection-row" aria-label="Import destination">
+            <label className="checkbox-row">
+              <input
+                aria-label="Create new cookbook for this import"
+                checked={state.createCookbookForImport}
+                disabled={state.importState.status === "ready"}
+                onChange={(event) => updateState({ createCookbookForImport: event.target.checked })}
+                type="checkbox"
+              />
+              Create new cookbook for this import
+            </label>
+            {state.createCookbookForImport ? (
+              <label>
+                <span>New cookbook name</span>
+                <input
+                  aria-label="New import cookbook name"
+                  disabled={state.importState.status === "ready"}
+                  placeholder="Reduction diet, Family meals, Bulk prep"
+                  value={state.importCookbookName}
+                  onChange={(event) => updateState({ importCookbookName: event.target.value })}
+                />
+              </label>
+            ) : null}
+          </div>
+
+          {state.importState.status === "ready" ? (
+            <ImportSuccess importState={state.importState} />
+          ) : null}
+
           <div className="action-row">
             {state.previewState.status === "ready" &&
             state.previewState.preview.validRecipes.length > 0 ? (
               <>
-                <button className="primary-button" type="button" onClick={() => void importPack()}>
-                  Import valid recipes
+                <button
+                  className="primary-button"
+                  disabled={
+                    state.importState.status === "loading" || state.importState.status === "ready"
+                  }
+                  type="button"
+                  onClick={() => void importPack()}
+                >
+                  {state.importState.status === "ready" ? "Imported" : "Import valid recipes"}
                 </button>
                 <button className="secondary-button" type="button" onClick={previewPack}>
                   Preview again
@@ -318,11 +366,6 @@ export function RecipeTransferScreen({
           ) : null}
           {state.importState.status === "error" ? (
             <ErrorView title="Import failed" message={state.importState.message} />
-          ) : null}
-          {state.importState.status === "ready" ? (
-            <div className="state-view" role="status">
-              <p className="state-view__title">{state.importState.message}</p>
-            </div>
           ) : null}
         </section>
       ) : null}
@@ -355,6 +398,36 @@ export function RecipeTransferScreen({
         </section>
       ) : null}
     </section>
+  );
+}
+
+function ImportSuccess({
+  importState,
+}: {
+  importState: RecipeTransferImportState & { status: "ready" };
+}) {
+  const visibleTitles = importState.importedTitles.slice(0, 3);
+  const remainingTitleCount = importState.importedTitles.length - visibleTitles.length;
+
+  return (
+    <div className="state-view" role="status">
+      <p className="state-view__title">{importState.message}</p>
+      <p className="state-view__message">Re-export a fresh backup after adding imported recipes.</p>
+      {visibleTitles.length > 0 ? (
+        <ul className="compact-list" aria-label="Imported recipe titles">
+          {visibleTitles.map((title) => (
+            <li key={title}>
+              <span>{title}</span>
+            </li>
+          ))}
+          {remainingTitleCount > 0 ? (
+            <li>
+              <span>{remainingTitleCount} more imported recipes</span>
+            </li>
+          ) : null}
+        </ul>
+      ) : null}
+    </div>
   );
 }
 

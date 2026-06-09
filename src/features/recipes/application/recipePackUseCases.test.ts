@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { err, ok } from "../../../core/result/Result";
+import type { CookbookUseCases } from "../../cookbooks/application/cookbookUseCases";
+import type { CookbookInput } from "../../cookbooks/domain/cookbook";
 import type { Recipe } from "../domain/recipe";
 import {
   createRecipePackUseCases,
@@ -54,6 +56,7 @@ function createRecipeUseCases(overrides: Partial<RecipeUseCases> = {}): RecipeUs
 
 const fixedNow = () => new Date("2026-05-24T12:00:00.000Z");
 const fixedId = ({ index }: { index: number }) => `recipe-import-${index + 1}`;
+const fixedCookbookId = () => "cookbook-import-reduction";
 
 describe("recipe pack use cases", () => {
   it("exports all recipes as a Comero recipe pack", async () => {
@@ -219,9 +222,186 @@ describe("recipe pack use cases", () => {
         importedCount: 1,
         skippedCount: 0,
         importedTitles: ["Imported soup"],
+        destinationLabel: "existing cookbook assignments",
       },
     });
     expect(createRecipe).toHaveBeenCalledWith(expect.objectContaining({ id: "recipe-import-1" }));
+  });
+
+  it("imports valid recipes into a new cookbook with category assignments", async () => {
+    const createRecipe = vi.fn(async (input) =>
+      ok({
+        ...sampleRecipe,
+        ...input,
+        description: input.description ?? "",
+        categoryPath: input.categoryPath ?? [],
+        tags: input.tags ?? [],
+        isFavorite: input.isFavorite ?? false,
+        isTemplate: input.isTemplate ?? false,
+      }),
+    );
+    const createCookbook = vi.fn(async (input: CookbookInput) =>
+      ok({
+        ...input,
+        categories: input.categories ?? [],
+      }),
+    );
+    const useCases = createRecipePackUseCases(createRecipeUseCases({ createRecipe }), {
+      cookbookUseCases: createCookbookUseCases({ createCookbook }),
+      createCookbookId: fixedCookbookId,
+      createId: fixedId,
+      now: fixedNow,
+    });
+    const pack = JSON.stringify({
+      recipes: [
+        {
+          title: "Lean oats",
+          baseServings: 1,
+          ingredients: [{ name: "Oats", quantity: 60, unit: "g" }],
+          steps: ["Cook oats."],
+          categoryPath: ["Breakfast"],
+        },
+        {
+          title: "Chicken bowl",
+          baseServings: 2,
+          ingredients: [{ name: "Chicken", quantity: 200, unit: "g" }],
+          steps: ["Assemble bowl."],
+          categoryPath: ["Lunch", "High protein"],
+        },
+        {
+          title: "Greek yogurt",
+          baseServings: 1,
+          ingredients: [{ name: "Yogurt", quantity: 200, unit: "g" }],
+          steps: ["Serve chilled."],
+        },
+      ],
+    });
+
+    const result = await useCases.importRecipePack(pack, {
+      destination: { type: "new-cookbook", cookbookName: "Reduction diet" },
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        importedCount: 3,
+        skippedCount: 0,
+        importedTitles: ["Lean oats", "Chicken bowl", "Greek yogurt"],
+        destinationLabel: "Reduction diet",
+        targetCookbookId: "cookbook-import-reduction",
+        targetCookbookName: "Reduction diet",
+      },
+    });
+    expect(createCookbook).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "cookbook-import-reduction",
+        name: "Reduction diet",
+        categories: [
+          expect.objectContaining({
+            name: "Breakfast",
+            recipeIds: ["recipe-import-1"],
+          }),
+          expect.objectContaining({
+            name: "Lunch",
+            recipeIds: [],
+            children: [
+              expect.objectContaining({
+                name: "High protein",
+                recipeIds: ["recipe-import-2"],
+              }),
+            ],
+          }),
+          expect.objectContaining({
+            name: "General",
+            recipeIds: ["recipe-import-3"],
+          }),
+        ],
+      }),
+    );
+    expect(createRecipe).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cookbookId: "cookbook-import-reduction",
+        title: "Lean oats",
+        categoryPath: ["Breakfast"],
+      }),
+    );
+    expect(createRecipe).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cookbookId: "cookbook-import-reduction",
+        title: "Greek yogurt",
+        categoryPath: ["General"],
+      }),
+    );
+  });
+
+  it("validates new cookbook destination before importing recipes", async () => {
+    const createRecipe = vi.fn();
+    const createCookbook = vi.fn();
+    const useCases = createRecipePackUseCases(createRecipeUseCases({ createRecipe }), {
+      cookbookUseCases: createCookbookUseCases({ createCookbook }),
+      createId: fixedId,
+      now: fixedNow,
+    });
+    const pack = JSON.stringify({
+      recipes: [
+        {
+          title: "Imported soup",
+          baseServings: 2,
+          ingredients: [{ name: "Stock", quantity: 500, unit: "ml" }],
+          steps: ["Simmer."],
+        },
+      ],
+    });
+
+    const result = await useCases.importRecipePack(pack, {
+      destination: { type: "new-cookbook", cookbookName: " " },
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: "validation",
+        message: "Cookbook name is required.",
+      },
+    });
+    expect(createCookbook).not.toHaveBeenCalled();
+    expect(createRecipe).not.toHaveBeenCalled();
+  });
+
+  it("surfaces cookbook repository failures before importing recipes", async () => {
+    const createRecipe = vi.fn();
+    const createCookbook = vi.fn(async () =>
+      err({ code: "repository" as const, message: "Cookbook storage is unavailable." }),
+    );
+    const useCases = createRecipePackUseCases(createRecipeUseCases({ createRecipe }), {
+      cookbookUseCases: createCookbookUseCases({ createCookbook }),
+      createCookbookId: fixedCookbookId,
+      createId: fixedId,
+      now: fixedNow,
+    });
+    const pack = JSON.stringify({
+      recipes: [
+        {
+          title: "Imported soup",
+          baseServings: 2,
+          ingredients: [{ name: "Stock", quantity: 500, unit: "ml" }],
+          steps: ["Simmer."],
+        },
+      ],
+    });
+
+    const result = await useCases.importRecipePack(pack, {
+      destination: { type: "new-cookbook", cookbookName: "Reduction diet" },
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: expect.objectContaining({
+        code: "repository",
+        message: "Cookbook storage is unavailable.",
+      }),
+    });
+    expect(createRecipe).not.toHaveBeenCalled();
   });
 
   it("surfaces repository failures during export", async () => {
@@ -239,3 +419,21 @@ describe("recipe pack use cases", () => {
     });
   });
 });
+
+function createCookbookUseCases(overrides: Partial<CookbookUseCases> = {}): CookbookUseCases {
+  return {
+    createCookbook: vi.fn(async (input) =>
+      ok({
+        ...input,
+        categories: input.categories ?? [],
+      }),
+    ),
+    listCookbooks: vi.fn(async () => ok([])),
+    createCategory: vi.fn(),
+    renameCategory: vi.fn(),
+    deleteCategory: vi.fn(),
+    assignRecipe: vi.fn(),
+    unassignRecipe: vi.fn(),
+    ...overrides,
+  };
+}

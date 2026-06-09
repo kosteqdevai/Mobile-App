@@ -4,7 +4,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { err, ok } from "../../../core/result/Result";
 import type { RecipePackFileUseCases } from "../application/recipePackFileUseCases";
-import type { RecipePackUseCases } from "../application/recipePackUseCases";
+import type {
+  RecipePackImportOptions,
+  RecipePackUseCases,
+} from "../application/recipePackUseCases";
 import { RecipeTransferScreen } from "./RecipeTransferScreen";
 import { initialRecipeTransferScreenState } from "./RecipeTransferState";
 
@@ -56,11 +59,15 @@ function createRecipePackUseCases(overrides: Partial<RecipePackUseCases> = {}): 
         invalidRecipes: [],
       }),
     ),
-    importRecipePack: vi.fn(async () =>
+    importRecipePack: vi.fn(async (_jsonText: string, options?: RecipePackImportOptions) =>
       ok({
         importedCount: 1,
         skippedCount: 0,
         importedTitles: ["Imported soup"],
+        destinationLabel:
+          options?.destination?.type === "new-cookbook"
+            ? options.destination.cookbookName
+            : "existing cookbook assignments",
       }),
     ),
     getAiPromptTemplate: vi.fn(() => "Return only valid JSON."),
@@ -241,8 +248,69 @@ describe("RecipeTransferScreen", () => {
     await waitFor(() => {
       expect(onImported).toHaveBeenCalledTimes(1);
     });
-    expect(screen.getByRole("status")).toHaveTextContent("Imported 1 recipes. Skipped 0.");
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Imported 1 recipes to existing cookbook assignments. Skipped 0.",
+    );
+    expect(screen.getByRole("status")).toHaveTextContent("Imported soup");
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Re-export a fresh backup after adding imported recipes.",
+    );
     expect(recipePackUseCases.importRecipePack).toHaveBeenCalledWith(sampleJson);
+  });
+
+  it("imports previewed recipes into a named new cookbook and prevents duplicate import", async () => {
+    const recipePackUseCases = createRecipePackUseCases();
+
+    render(<RecipeTransferScreen recipePackUseCases={recipePackUseCases} onImported={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText("Recipe pack JSON"), {
+      target: { value: sampleJson },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Preview import" }));
+    expect(await screen.findByText("1 valid, 0 invalid, 1 total.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText("Create new cookbook for this import"));
+    fireEvent.change(screen.getByLabelText("New import cookbook name"), {
+      target: { value: "Reduction diet" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Import valid recipes" }));
+
+    expect(
+      await screen.findByText("Imported 1 recipes to Reduction diet. Skipped 0."),
+    ).toBeInTheDocument();
+    expect(recipePackUseCases.importRecipePack).toHaveBeenCalledWith(sampleJson, {
+      destination: { type: "new-cookbook", cookbookName: "Reduction diet" },
+    });
+    expect(screen.getByRole("button", { name: "Imported" })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Imported" }));
+    expect(recipePackUseCases.importRecipePack).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Preview again" }));
+    expect(screen.getByRole("button", { name: "Import valid recipes" })).toBeEnabled();
+  });
+
+  it("shows new cookbook validation errors from import", async () => {
+    const recipePackUseCases = createRecipePackUseCases({
+      importRecipePack: vi.fn(async () =>
+        err({
+          code: "validation",
+          message: "Cookbook name is required.",
+        }),
+      ),
+    });
+
+    render(<RecipeTransferScreen recipePackUseCases={recipePackUseCases} onImported={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText("Recipe pack JSON"), {
+      target: { value: sampleJson },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Preview import" }));
+    expect(await screen.findByText("1 valid, 0 invalid, 1 total.")).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText("Create new cookbook for this import"));
+    fireEvent.click(screen.getByRole("button", { name: "Import valid recipes" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Cookbook name is required.");
   });
 
   it("shows invalid JSON preview errors without importing", async () => {

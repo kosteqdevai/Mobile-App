@@ -1028,3 +1028,16 @@ tests: App shell smoke tests, Vite build or full quality, in-app browser logo sm
 closes_when: The connected Android device receives an update-installed debug build using the exact supplied icon.
 escalate_if: The source attachment cannot be extracted or a different source image is required.
 do_not: Do not redraw, regenerate, approximate, change package id, or wipe local app data.
+
+## GAP-080 — Import recipe packs into a new cookbook
+phase: 4
+status: closed
+type: ui
+blocked_by: GAP-061, GAP-077
+goal: Let users import an AI-generated or backup recipe pack directly into a newly created local cookbook.
+scope: Recipe pack import use cases, Backup import UI/state, app dependency wiring, import/export docs, unit/component/integration tests.
+acceptance_criteria: Import keeps the recipe-pack JSON format unchanged; default import behavior still works; users can choose `Create new cookbook for this import`, enter a cookbook name, and import valid recipes into that cookbook; categories are created from imported `categoryPath` values with `General` for uncategorized recipes; success feedback clearly names the destination, imported counts, skipped count, sample titles, and backup re-export guidance; repeated import of the same preview is blocked until the user changes input or previews again.
+tests: Unit tests for default import, new-cookbook import, category creation, blank cookbook names, and cookbook repository failure; component tests for destination controls, success feedback, duplicate-import guard, and validation errors; integration test for importing a reduction-diet pack into a new cookbook, filtering it, and exporting the updated library; full quality check.
+closes_when: A user can bulk-import valid recipes into a new local cookbook from the Backup screen and see an unmistakable completion message without backend sync or recipe-pack format changes.
+escalate_if: Import must include cookbook records in the JSON format, merge with existing cookbooks by name, support overwrite semantics, parse spreadsheets, sync to cloud, or perform AI/nutrition/unit conversion inside the app.
+do_not: Do not add backend sync, accounts, public publishing, CSV/XLSX parsing, automatic nutrition calculation, automatic unit conversion, or duplicate/overwrite import semantics.

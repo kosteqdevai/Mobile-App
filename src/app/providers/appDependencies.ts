@@ -205,15 +205,16 @@ function createAppDependencies(
   recipePackFilePort: RecipePackFilePort,
 ): AppDependencies {
   const recipeUseCases = createRecipeUseCases(recipeRepository);
+  const cookbookUseCases = createCookbookUseCases(cookbookRepository);
 
   return {
     appConfig,
     recipeUseCases,
     recipeExportUseCases: createRecipeExportUseCases(recipeUseCases, recipeSharePort),
-    recipePackUseCases: createRecipePackUseCases(recipeUseCases),
+    recipePackUseCases: createRecipePackUseCases(recipeUseCases, { cookbookUseCases }),
     recipePackFileUseCases: createRecipePackFileUseCases(recipePackFilePort),
     cookSessionUseCases: createCookSessionUseCases(cookSessionStore),
-    cookbookUseCases: createCookbookUseCases(cookbookRepository),
+    cookbookUseCases,
     mealPlanUseCases: createMealPlanUseCases(mealPlanRepository, recipeRepository),
     recipeComponentUseCases: createRecipeComponentUseCases(recipeComponentRepository),
   };

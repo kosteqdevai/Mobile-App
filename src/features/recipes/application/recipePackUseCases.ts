@@ -1,4 +1,6 @@
 import { err, ok, type Result } from "../../../core/result/Result";
+import type { CookbookUseCases } from "../../cookbooks/application/cookbookUseCases";
+import type { CategoryNode } from "../../cookbooks/domain/cookbook";
 import {
   createRecipe,
   type AllergenPresenceStatus,
@@ -45,9 +47,20 @@ export type RecipePackImportResult = {
   importedCount: number;
   skippedCount: number;
   importedTitles: ReadonlyArray<string>;
+  destinationLabel: string;
+  targetCookbookId?: string;
+  targetCookbookName?: string;
 };
 
-export type RecipePackErrorCode = "invalid-json" | "invalid-pack" | "repository";
+export type RecipePackImportDestination =
+  | { type: "default" }
+  | { type: "new-cookbook"; cookbookName: string };
+
+export type RecipePackImportOptions = {
+  destination?: RecipePackImportDestination;
+};
+
+export type RecipePackErrorCode = "invalid-json" | "invalid-pack" | "repository" | "validation";
 
 export type RecipePackError = {
   code: RecipePackErrorCode;
@@ -58,16 +71,35 @@ export type RecipePackError = {
 export type RecipePackUseCases = {
   exportRecipePack(): Promise<Result<RecipePackExport, RecipePackError>>;
   previewRecipePack(jsonText: string): Result<RecipePackPreview, RecipePackError>;
-  importRecipePack(jsonText: string): Promise<Result<RecipePackImportResult, RecipePackError>>;
+  importRecipePack(
+    jsonText: string,
+    options?: RecipePackImportOptions,
+  ): Promise<Result<RecipePackImportResult, RecipePackError>>;
   getAiPromptTemplate(): string;
 };
 
 type RecipePackOptions = {
+  cookbookUseCases?: CookbookUseCases;
   now?: () => Date;
   createId?: (input: { index: number; title: string; now: Date }) => string;
+  createCookbookId?: (input: { name: string; now: Date }) => string;
 };
 
 type ObjectRecord = Record<string, unknown>;
+
+type ResolvedImportDestination = {
+  destinationLabel: string;
+  targetCookbookId?: string;
+  targetCookbookName?: string;
+  recipeInputForImport: (input: RecipeInput) => RecipeInput;
+};
+
+type MutableCategoryNode = {
+  id: string;
+  name: string;
+  recipeIds: string[];
+  children: MutableCategoryNode[];
+};
 
 export function createRecipePackUseCases(
   recipeUseCases: RecipeUseCases,
@@ -75,6 +107,7 @@ export function createRecipePackUseCases(
 ): RecipePackUseCases {
   const now = options.now ?? (() => new Date());
   const createId = options.createId ?? createImportedRecipeId;
+  const createCookbookId = options.createCookbookId ?? createImportedCookbookId;
 
   return {
     async exportRecipePack() {
@@ -162,17 +195,32 @@ export function createRecipePackUseCases(
       });
     },
 
-    async importRecipePack(jsonText) {
+    async importRecipePack(jsonText, importOptions = {}) {
       const previewResult = this.previewRecipePack(jsonText);
 
       if (!previewResult.ok) {
         return previewResult;
       }
 
+      const importedAt = now();
+      const destinationResult = await resolveImportDestination({
+        cookbookUseCases: options.cookbookUseCases,
+        createCookbookId,
+        destination: importOptions.destination ?? { type: "default" },
+        importedAt,
+        validRecipes: previewResult.value.validRecipes,
+      });
+
+      if (!destinationResult.ok) {
+        return destinationResult;
+      }
+
       const importedTitles: string[] = [];
 
       for (const recipe of previewResult.value.validRecipes) {
-        const createResult = await recipeUseCases.createRecipe(recipe.recipeInput);
+        const createResult = await recipeUseCases.createRecipe(
+          destinationResult.value.recipeInputForImport(recipe.recipeInput),
+        );
 
         if (!createResult.ok) {
           return err({
@@ -189,6 +237,13 @@ export function createRecipePackUseCases(
         importedCount: importedTitles.length,
         skippedCount: previewResult.value.invalidRecipes.length,
         importedTitles,
+        destinationLabel: destinationResult.value.destinationLabel,
+        ...(destinationResult.value.targetCookbookId
+          ? { targetCookbookId: destinationResult.value.targetCookbookId }
+          : {}),
+        ...(destinationResult.value.targetCookbookName
+          ? { targetCookbookName: destinationResult.value.targetCookbookName }
+          : {}),
       });
     },
 
@@ -252,6 +307,132 @@ export function createRecipePackUseCases(
       ].join("\n\n");
     },
   };
+}
+
+async function resolveImportDestination(input: {
+  cookbookUseCases?: CookbookUseCases;
+  createCookbookId: NonNullable<RecipePackOptions["createCookbookId"]>;
+  destination: RecipePackImportDestination;
+  importedAt: Date;
+  validRecipes: ReadonlyArray<RecipePackPreviewRecipe>;
+}): Promise<Result<ResolvedImportDestination, RecipePackError>> {
+  if (input.destination.type === "default") {
+    return ok({
+      destinationLabel: "existing cookbook assignments",
+      recipeInputForImport: (recipeInput) => recipeInput,
+    });
+  }
+
+  const cookbookName = input.destination.cookbookName.trim();
+
+  if (cookbookName.length === 0) {
+    return err({
+      code: "validation",
+      message: "Cookbook name is required.",
+    });
+  }
+
+  if (!input.cookbookUseCases) {
+    return err({
+      code: "repository",
+      message: "Cookbook storage is unavailable.",
+    });
+  }
+
+  const cookbookId = input.createCookbookId({ name: cookbookName, now: input.importedAt });
+  const date = input.importedAt.toISOString();
+  const createResult = await input.cookbookUseCases.createCookbook({
+    id: cookbookId,
+    name: cookbookName,
+    categories: buildImportCategoryTree(input.validRecipes, cookbookId),
+    createdAt: date,
+    updatedAt: date,
+  });
+
+  if (!createResult.ok) {
+    return err({
+      code: createResult.error.code === "repository" ? "repository" : "validation",
+      message: createResult.error.message,
+      details: createResult.error.details,
+    });
+  }
+
+  return ok({
+    destinationLabel: cookbookName,
+    targetCookbookId: cookbookId,
+    targetCookbookName: cookbookName,
+    recipeInputForImport: (recipeInput) => ({
+      ...recipeInput,
+      cookbookId,
+      categoryPath: importCategoryPath(recipeInput),
+    }),
+  });
+}
+
+function buildImportCategoryTree(
+  recipes: ReadonlyArray<RecipePackPreviewRecipe>,
+  cookbookId: string,
+): ReadonlyArray<CategoryNode> {
+  const categories: MutableCategoryNode[] = [];
+  let nextCategoryNumber = 1;
+
+  recipes.forEach((recipe) => {
+    let siblings = categories;
+
+    importCategoryPath(recipe.recipeInput).forEach((categoryName, categoryIndex, path) => {
+      const existingCategory = siblings.find(
+        (category) => category.name.trim().toLowerCase() === categoryName.toLowerCase(),
+      );
+      const category =
+        existingCategory ??
+        createImportCategoryNode(cookbookId, categoryName, nextCategoryNumber++);
+
+      if (!existingCategory) {
+        siblings.push(category);
+      }
+
+      if (
+        categoryIndex === path.length - 1 &&
+        !category.recipeIds.includes(recipe.recipeInput.id)
+      ) {
+        category.recipeIds.push(recipe.recipeInput.id);
+      }
+
+      siblings = category.children;
+    });
+  });
+
+  return categories.map(toCategoryNode);
+}
+
+function createImportCategoryNode(
+  cookbookId: string,
+  categoryName: string,
+  categoryNumber: number,
+): MutableCategoryNode {
+  return {
+    id: `category-${cookbookId}-${categoryNumber}-${slugValue(categoryName) || "category"}`,
+    name: categoryName,
+    recipeIds: [],
+    children: [],
+  };
+}
+
+function toCategoryNode(category: MutableCategoryNode): CategoryNode {
+  return {
+    id: category.id,
+    name: category.name,
+    recipeIds: category.recipeIds,
+    children: category.children.map(toCategoryNode),
+  };
+}
+
+function importCategoryPath(recipeInput: RecipeInput) {
+  const categoryPath = (recipeInput.categoryPath ?? [])
+    .map((category) => category.trim())
+    .filter((category) => category.length > 0);
+
+  return categoryPath.length > 0 ? categoryPath : ["General"];
 }
 
 function parseRecipePack(jsonText: string): Result<ReadonlyArray<unknown>, RecipePackError> {
@@ -564,15 +745,25 @@ function stringArrayValue(value: unknown) {
 }
 
 function createImportedRecipeId(input: { index: number; title: string; now: Date }) {
-  const titleSlug = input.title
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 36);
+  const titleSlug = slugValue(input.title).slice(0, 36);
   const randomSuffix = globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2, 10);
 
   return `recipe-import-${dateStamp(input.now)}-${input.index + 1}-${titleSlug || "recipe"}-${randomSuffix}`;
+}
+
+function createImportedCookbookId(input: { name: string; now: Date }) {
+  const nameSlug = slugValue(input.name).slice(0, 36);
+  const randomSuffix = globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2, 10);
+
+  return `cookbook-import-${dateStamp(input.now)}-${nameSlug || "cookbook"}-${randomSuffix}`;
+}
+
+function slugValue(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
 }
 
 function dateStamp(date: Date) {

@@ -227,6 +227,79 @@ describe("MVP flow integration", () => {
     expect(screen.getByText("Template recipe")).toBeInTheDocument();
   });
 
+  it("imports an AI-style recipe pack into a new cookbook and exports the updated library", async () => {
+    const storage = new MemoryKeyValueStore();
+    const database = new MemoryLocalDatabase();
+    renderPersistedApp(storage, database);
+
+    expect(await screen.findByRole("heading", { name: "Recipes" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Backup" }));
+
+    fireEvent.change(await screen.findByLabelText("Recipe pack JSON"), {
+      target: {
+        value: JSON.stringify({
+          format: "lacucina.recipe-pack",
+          version: 1,
+          recipes: [
+            {
+              title: "Lean oats",
+              description: "Reduction breakfast.",
+              baseServings: 1,
+              ingredients: [{ name: "Oats", quantity: 60, unit: "g" }],
+              steps: ["Cook oats with water."],
+              categoryPath: ["Breakfast"],
+              tags: ["reduction"],
+              nutrition: { calories: 260, protein: { amount: 12, unit: "g" } },
+            },
+            {
+              title: "Chicken bowl",
+              description: "High-protein lunch.",
+              baseServings: 2,
+              ingredients: [{ name: "Chicken breast", quantity: 240, unit: "g" }],
+              steps: ["Cook chicken and assemble bowl."],
+              categoryPath: ["Lunch", "High protein"],
+              tags: ["reduction", "high-protein"],
+              nutrition: { calories: 520, protein: { amount: 54, unit: "g" } },
+            },
+          ],
+        }),
+      },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Preview import" }));
+    expect(await screen.findByText("2 valid, 0 invalid, 2 total.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText("Create new cookbook for this import"));
+    fireEvent.change(screen.getByLabelText("New import cookbook name"), {
+      target: { value: "Reduction diet" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Import valid recipes" }));
+    expect(
+      await screen.findByText("Imported 2 recipes to Reduction diet. Skipped 0."),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Recipes" }));
+    const cookbookFilter = (await screen.findByLabelText(
+      "Filter recipes by cookbook",
+    )) as HTMLSelectElement;
+    const importedCookbookOption = Array.from(cookbookFilter.options).find(
+      (option) => option.textContent === "Reduction diet",
+    );
+
+    if (!importedCookbookOption) {
+      throw new Error("Expected imported cookbook filter option.");
+    }
+
+    fireEvent.change(cookbookFilter, { target: { value: importedCookbookOption.value } });
+    expect(await screen.findByRole("button", { name: /Lean oats/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Chicken bowl/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Tomato rice/i })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Backup" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Export" }));
+    fireEvent.click(screen.getByRole("button", { name: "Export" }));
+    expect(await screen.findByText(/3 recipes ready/)).toBeInTheDocument();
+  });
+
   it("exports the current persisted recipes after adding a new recipe", async () => {
     const storage = new MemoryKeyValueStore();
     const database = new MemoryLocalDatabase();

@@ -16,12 +16,21 @@ export type RecipeTransferPreviewState =
 export type RecipeTransferImportState =
   | { status: "idle" }
   | { status: "loading" }
-  | { status: "ready"; message: string }
+  | {
+      status: "ready";
+      message: string;
+      importedCount: number;
+      skippedCount: number;
+      destinationLabel: string;
+      importedTitles: ReadonlyArray<string>;
+    }
   | { status: "error"; message: string };
 
 export type RecipeTransferScreenState = {
   activeTab: RecipeTransferTab;
   exportState: RecipeTransferExportState;
+  createCookbookForImport: boolean;
+  importCookbookName: string;
   packText: string;
   previewState: RecipeTransferPreviewState;
   importState: RecipeTransferImportState;
@@ -31,6 +40,8 @@ export type RecipeTransferScreenState = {
 export const initialRecipeTransferScreenState: RecipeTransferScreenState = {
   activeTab: "import",
   exportState: { status: "idle" },
+  createCookbookForImport: false,
+  importCookbookName: "",
   packText: "",
   previewState: { status: "idle" },
   importState: { status: "idle" },

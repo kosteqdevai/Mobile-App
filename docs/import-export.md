@@ -13,6 +13,7 @@ Primary flows:
 - Import a recipe pack from pasted text or a selected file.
 - Preview valid and invalid recipes before saving.
 - Import valid recipes as new private copies.
+- Optionally create a new local cookbook during import and place the imported recipes there.
 - Copy an AI prompt/template that asks for Comero-compatible recipe pack JSON.
 
 ## Mobile Export Behavior
@@ -35,6 +36,8 @@ The current format is:
 Recipes in a pack may include normal Comero recipe fields. Import generates fresh local IDs and timestamps so an imported recipe never overwrites an existing one.
 
 Compatibility note: the JSON `format` identifier remains `lacucina.recipe-pack` so existing backups keep importing after the Comero rebrand.
+
+When importing, users can keep the pack's existing cookbook assignments or create a new local cookbook for that import. New-cookbook import does not change the recipe-pack format: Comero creates the local cookbook from the UI-provided name, copies valid recipes into that cookbook, creates categories from each recipe's `categoryPath`, and places recipes without a category path in `General`.
 
 The importer is intentionally forgiving for common AI output:
 

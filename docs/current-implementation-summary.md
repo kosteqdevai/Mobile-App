@@ -50,6 +50,7 @@ Users can:
 - export all recipes to a private Comero Recipe Pack JSON backup;
 - on Android, open native save/share options for the generated backup file because WebView blob downloads are unreliable;
 - paste or select a recipe pack, preview valid/invalid recipes, and import valid recipes as new private copies;
+- optionally create a new local cookbook for an import, with categories derived from imported `categoryPath` values;
 - copy an AI prompt/template for bulk recipe pack generation.
 
 Current recipe form supports dynamic ingredient and step collections. The domain model stores these as arrays.
